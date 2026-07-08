@@ -10,6 +10,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.DisabledException;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -64,6 +65,23 @@ public class GlobalExceptionHandler {
         return new ResponseEntity<>(body, HttpStatus.BAD_REQUEST);
     }
 
+
+    @ExceptionHandler(BusinessValidationException.class)
+    public ResponseEntity<Map<String, Object>> handleBusinessValidationException(BusinessValidationException ex) {
+        Map<String, Object> body = errorBody(ex.getMessage(), HttpStatus.UNPROCESSABLE_ENTITY);
+        if (!ex.getFieldErrors().isEmpty()) {
+            body.put("fieldErrors", ex.getFieldErrors());
+        }
+        log.warn("Business validation failed: {} fields={}", ex.getMessage(), ex.getFieldErrors());
+        return new ResponseEntity<>(body, HttpStatus.UNPROCESSABLE_ENTITY);
+    }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<Map<String, Object>> handleAccessDeniedException(AccessDeniedException ex) {
+        log.warn("Access denied: {}", ex.getMessage());
+        return new ResponseEntity<>(errorBody(ex.getMessage(), HttpStatus.FORBIDDEN), HttpStatus.FORBIDDEN);
+    }
+
     @ExceptionHandler(ResourceNotFoundException.class)
     public ResponseEntity<Map<String, Object>> handleResourceNotFoundException(ResourceNotFoundException ex) {
         log.warn("Resource not found: {}", ex.getMessage());
@@ -80,7 +98,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(MaxUploadSizeExceededException.class)
     public ResponseEntity<Map<String, Object>> handleMaxUploadSizeExceededException(MaxUploadSizeExceededException ex) {
         log.warn("Uploaded file exceeded allowed size", ex);
-        String message = "Uploaded file is too large. Maximum allowed size is 2 MB.";
+        String message = "Uploaded file is too large. Maximum allowed size is 5 MB per file.";
         return new ResponseEntity<>(errorBody(message, HttpStatus.BAD_REQUEST), HttpStatus.BAD_REQUEST);
     }
 

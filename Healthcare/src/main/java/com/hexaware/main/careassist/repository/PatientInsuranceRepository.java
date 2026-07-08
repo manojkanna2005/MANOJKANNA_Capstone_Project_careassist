@@ -7,8 +7,11 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 import com.hexaware.main.careassist.entity.PatientInsurance;
 
-
 public interface PatientInsuranceRepository extends JpaRepository<PatientInsurance, Integer> {
     List<PatientInsurance> findByPatientPatientId(Integer patientId);
-    Optional<PatientInsurance> findByPatientPatientIdAndStatus(Integer patientId, String status);
+    Optional<PatientInsurance> findTopByPatientPatientIdAndStatusOrderByEnrollmentIdDesc(Integer patientId, String status);
+    Optional<PatientInsurance> findTopByPatientPatientIdAndInsurancePlanInsuranceCompanyCompanyIdAndStatusOrderByEnrollmentIdDesc(
+            Integer patientId,
+            Integer companyId,
+            String status);
 }

@@ -16,7 +16,7 @@ import com.hexaware.main.careassist.dto.ClaimPaymentDTO;
 import com.hexaware.main.careassist.dto.UserDTO;
 import com.hexaware.main.careassist.entity.Admin;
 import com.hexaware.main.careassist.entity.AppUser;
-import com.hexaware.main.careassist.entity.Claim;
+//import com.hexaware.main.careassist.entity.Claim;
 import com.hexaware.main.careassist.entity.ClaimPayment;
 import com.hexaware.main.careassist.exception.ResourceNotFoundException;
 import com.hexaware.main.careassist.repository.AdminRepository;
@@ -24,6 +24,7 @@ import com.hexaware.main.careassist.repository.ClaimPaymentRepository;
 import com.hexaware.main.careassist.repository.ClaimRepository;
 import com.hexaware.main.careassist.repository.AppUserRepository;
 import com.hexaware.main.careassist.service.IAdminService;
+import com.hexaware.main.careassist.service.IClaimService;
 
 @Service
 @Transactional
@@ -41,6 +42,9 @@ public class AdminServiceImpl implements IAdminService {
 
     @Autowired
     private ClaimPaymentRepository paymentRepository;
+
+    @Autowired
+    private IClaimService claimService;
 
     @Override
     public AdminDTO createAdmin(AdminDTO dto) {
@@ -105,7 +109,7 @@ public class AdminServiceImpl implements IAdminService {
 
     @Override
     public List<ClaimDTO> getAllClaims() {
-        return claimRepository.findAll().stream().map(this::claimToDTO).collect(Collectors.toList());
+        return claimService.getAllClaims();
     }
 
     @Override
@@ -164,24 +168,24 @@ public class AdminServiceImpl implements IAdminService {
         return dto;
     }
 
-    private ClaimDTO claimToDTO(Claim claim) {
-        ClaimDTO dto = new ClaimDTO();
+    // private ClaimDTO claimToDTO(Claim claim) {
+    //     ClaimDTO dto = new ClaimDTO();
 
-        dto.setClaimId(claim.getClaimId());
-        dto.setPatientId(claim.getPatient().getPatientId());
-        dto.setInvoiceId(claim.getInvoice().getInvoiceId());
-        dto.setCompanyId(claim.getInsuranceCompany().getCompanyId());
-        dto.setDiagnosis(claim.getDiagnosis());
-        dto.setTreatment(claim.getTreatment());
-        dto.setDateOfService(claim.getDateOfService());
-        dto.setClaimAmount(claim.getClaimAmount());
-        dto.setSubmissionDate(claim.getSubmissionDate());
-        dto.setApprovalDate(claim.getApprovalDate());
-        dto.setStatus(claim.getStatus());
-        dto.setRejectionReason(claim.getRejectionReason());
+    //     dto.setClaimId(claim.getClaimId());
+    //     dto.setPatientId(claim.getPatient().getPatientId());
+    //     dto.setInvoiceId(claim.getInvoice().getInvoiceId());
+    //     dto.setCompanyId(claim.getInsuranceCompany().getCompanyId());
+    //     dto.setDiagnosis(claim.getDiagnosis());
+    //     dto.setTreatment(claim.getTreatment());
+    //     dto.setDateOfService(claim.getDateOfService());
+    //     dto.setClaimAmount(claim.getClaimAmount());
+    //     dto.setSubmissionDate(claim.getSubmissionDate());
+    //     dto.setApprovalDate(claim.getApprovalDate());
+    //     dto.setStatus(claim.getStatus());
+    //     dto.setRejectionReason(claim.getRejectionReason());
 
-        return dto;
-    }
+    //     return dto;
+    //}
 
     private ClaimPaymentDTO paymentToDTO(ClaimPayment payment) {
         ClaimPaymentDTO dto = new ClaimPaymentDTO();

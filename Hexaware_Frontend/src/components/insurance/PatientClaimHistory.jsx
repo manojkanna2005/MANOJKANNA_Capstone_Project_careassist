@@ -19,17 +19,15 @@ function PatientClaimHistory() {
       try {
         const company = await getCompanyByUserId(getUserId());
         const [companyClaims, patientList] = await Promise.all([
-          getClaimsByInsuranceCompanyId(company.companyId).catch(() => []),
-          getAllPatients().catch(() => []),
+          getClaimsByInsuranceCompanyId(company.companyId),
+          getAllPatients(),
         ]);
-
         setClaims(companyClaims);
         setPatients(patientList);
-      } catch (err) {
-        setError(err.userMessage || 'Unable to load claim history');
+      } catch (loadError) {
+        setError(loadError.userMessage || 'Unable to load claim history.');
       }
     }
-
     load();
   }, []);
 
@@ -43,7 +41,7 @@ function PatientClaimHistory() {
       <div className="card page-card p-4">
         <div className="mb-3">
           <label className="form-label">Patient</label>
-          <select className="form-select" value={patientId} onChange={(e) => setPatientId(e.target.value)}>
+          <select className="form-select" value={patientId} onChange={(event) => setPatientId(event.target.value)}>
             <option value="">All patients</option>
             {patients.map((patient) => (
               <option key={patient.patientId} value={patient.patientId}>
@@ -57,12 +55,14 @@ function PatientClaimHistory() {
           data={filtered}
           columns={[
             { key: 'claimId', label: 'Claim' },
-            { key: 'patientId', label: 'Patient' },
-            { key: 'invoiceId', label: 'Invoice' },
+            { key: 'patientName', label: 'Patient Name' },
+            { key: 'invoiceNumber', label: 'Invoice' },
+            { key: 'invoiceAmount', label: 'Invoice Amount', render: (row) => money(row.invoiceAmount) },
             { key: 'claimAmount', label: 'Claim Amount', render: (row) => money(row.claimAmount) },
             { key: 'submissionDate', label: 'Submitted' },
             { key: 'approvalDate', label: 'Approved' },
             { key: 'status', label: 'Status' },
+            { key: 'rejectionReason', label: 'Rejection Reason' },
           ]}
         />
       </div>

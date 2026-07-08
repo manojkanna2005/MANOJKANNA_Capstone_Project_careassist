@@ -1,104 +1,433 @@
 package com.hexaware.main.careassist.service.impl;
 
-import lombok.extern.slf4j.Slf4j;
+import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.stream.Collectors;
+import java.util.Set;
 
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import com.hexaware.main.careassist.dto.ClaimDTO;
+import com.hexaware.main.careassist.dto.ClaimDocumentDTO;
 import com.hexaware.main.careassist.entity.Claim;
 import com.hexaware.main.careassist.entity.InsuranceCompany;
 import com.hexaware.main.careassist.entity.Invoice;
 import com.hexaware.main.careassist.entity.Patient;
+import com.hexaware.main.careassist.entity.PatientInsurance;
+import com.hexaware.main.careassist.exception.BusinessValidationException;
 import com.hexaware.main.careassist.exception.ResourceNotFoundException;
+import com.hexaware.main.careassist.repository.ClaimDocumentRepository;
 import com.hexaware.main.careassist.repository.ClaimRepository;
 import com.hexaware.main.careassist.repository.InsuranceCompanyRepository;
 import com.hexaware.main.careassist.repository.InvoiceRepository;
+import com.hexaware.main.careassist.repository.PatientInsuranceRepository;
 import com.hexaware.main.careassist.repository.PatientRepository;
+import com.hexaware.main.careassist.service.IClaimDocumentService;
 import com.hexaware.main.careassist.service.IClaimService;
 import com.hexaware.main.careassist.service.IMailService;
 
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+
 @Service
 @Transactional
+@RequiredArgsConstructor
 @Slf4j
 public class ClaimServiceImpl implements IClaimService {
 
-	@Autowired
-    private ClaimRepository claimRepository;
-    
-	@Autowired
-	private PatientRepository patientRepository;
-    
-    @Autowired
-    private InvoiceRepository invoiceRepository;
-    
-    @Autowired
-    private InsuranceCompanyRepository companyRepository;
+    private static final Set<String> ACTIVE_CLAIM_STATUSES = Set.of("PENDING", "APPROVED");
 
-    @Autowired
-    private IMailService mailService;
+    private final ClaimRepository claimRepository;
+    private final ClaimDocumentRepository claimDocumentRepository;
+    private final PatientRepository patientRepository;
+    private final InvoiceRepository invoiceRepository;
+    private final InsuranceCompanyRepository companyRepository;
+    private final PatientInsuranceRepository patientInsuranceRepository;
+    private final IClaimDocumentService claimDocumentService;
+    private final IMailService mailService;
 
     @Override
     public ClaimDTO submitClaim(ClaimDTO dto) {
-        Claim claim = claimToEntity(dto);
-        if (claim.getSubmissionDate() == null) {
-            claim.setSubmissionDate(LocalDateTime.now());
-        }
-        if (claim.getStatus() == null || claim.getStatus().isBlank()) {
-            claim.setStatus("PENDING");
-        }
-        return claimToDTO(claimRepository.save(claim));
+        Claim savedClaim = createValidatedClaim(dto);
+        sendClaimSubmittedEmails(savedClaim);
+        return claimToDTO(savedClaim);
     }
 
     @Override
+    public ClaimDTO submitClaimWithDocuments(ClaimDTO dto, List<MultipartFile> files) {
+        if (files == null || files.stream().noneMatch(file -> file != null && !file.isEmpty())) {
+            throw new BusinessValidationException("documents", "At least one medical document is required.");
+        }
+
+        Claim savedClaim = createValidatedClaim(dto);
+        claimDocumentService.storeDocuments(savedClaim.getClaimId(), files);
+        sendClaimSubmittedEmails(savedClaim);
+        return claimToDTO(savedClaim);
+    }
+
+    private Claim createValidatedClaim(ClaimDTO dto) {
+        Patient patient = getPatient(dto.getPatientId());
+        Invoice invoice = getInvoice(dto.getInvoiceId());
+        InsuranceCompany company = getCompany(dto.getCompanyId());
+        PatientInsurance patientInsurance = getPatientInsurance(dto.getEnrollmentId());
+
+        validateCoverageAndRelationships(dto, patient, invoice, company, patientInsurance);
+        validateSubmitterOwnership(patient, invoice);
+
+        Claim claim = new Claim();
+        claim.setPatient(patient);
+        claim.setInvoice(invoice);
+        claim.setInsuranceCompany(company);
+        claim.setPatientInsurance(patientInsurance);
+        claim.setDiagnosis(dto.getDiagnosis().trim());
+        claim.setTreatment(dto.getTreatment().trim());
+        claim.setDateOfService(dto.getDateOfService());
+        claim.setClaimAmount(dto.getClaimAmount());
+        claim.setSubmissionDate(LocalDateTime.now());
+        claim.setApprovalDate(null);
+        claim.setStatus("PENDING");
+        claim.setRejectionReason(null);
+
+        Claim saved = claimRepository.save(claim);
+        log.info(
+                "Claim submitted claimId={} patientId={} invoiceId={} enrollmentId={} amount={}",
+                saved.getClaimId(),
+                patient.getPatientId(),
+                invoice.getInvoiceId(),
+                patientInsurance.getEnrollmentId(),
+                saved.getClaimAmount());
+        return saved;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public ClaimDTO getClaimById(Integer claimId) {
-        return claimToDTO(getClaimEntity(claimId));
+        Claim claim = getClaimEntity(claimId);
+        validateReadAccess(claim);
+        return claimToDTO(claim);
     }
 
     @Override
+    @Transactional(readOnly = true)
     public List<ClaimDTO> getClaimsByPatientId(Integer patientId) {
-        return claimRepository.findByPatientPatientId(patientId).stream().map(this::claimToDTO).collect(Collectors.toList());
+        return claimRepository.findByPatientPatientId(patientId).stream()
+                .filter(this::canCurrentUserRead)
+                .map(this::claimToDTO)
+                .toList();
     }
 
     @Override
+    @Transactional(readOnly = true)
     public List<ClaimDTO> getClaimsByInsuranceCompanyId(Integer companyId) {
-        return claimRepository.findByInsuranceCompanyCompanyId(companyId).stream().map(this::claimToDTO).collect(Collectors.toList());
+        return claimRepository.findByInsuranceCompanyCompanyId(companyId).stream()
+                .filter(this::canCurrentUserRead)
+                .map(this::claimToDTO)
+                .toList();
     }
 
     @Override
+    @Transactional(readOnly = true)
     public List<ClaimDTO> getAllClaims() {
-        return claimRepository.findAll().stream().map(this::claimToDTO).collect(Collectors.toList());
+        Authentication authentication = currentAuthentication();
+        if (authentication != null && authentication.getAuthorities().stream()
+                .noneMatch(authority -> "ROLE_ADMIN".equals(authority.getAuthority()))) {
+            throw new AccessDeniedException("Only administrators can view all claims.");
+        }
+        return claimRepository.findAll().stream()
+                .map(this::claimToDTO)
+                .toList();
     }
 
     @Override
     public ClaimDTO approveClaim(Integer claimId) {
         Claim claim = getClaimEntity(claimId);
+        if (!"PENDING".equalsIgnoreCase(claim.getStatus())) {
+            throw new BusinessValidationException("status", "Only pending claims can be approved.");
+        }
+
+        validateInsuranceDecisionOwner(claim);
+        validateRemainingCoverageForApproval(claim);
+
         claim.setStatus("APPROVED");
         claim.setApprovalDate(LocalDateTime.now());
         claim.setRejectionReason(null);
         Claim savedClaim = claimRepository.save(claim);
-        sendClaimStatusEmail(savedClaim, "approved", "Your claim has been approved by the insurance company.");
+
+        sendClaimStatusEmail(
+                savedClaim,
+                "approved",
+                "Your claim has been approved by the insurance company.");
+        log.info("Claim approved claimId={} amount={}", claimId, claim.getClaimAmount());
         return claimToDTO(savedClaim);
     }
 
     @Override
     public ClaimDTO rejectClaim(Integer claimId, String rejectionReason) {
+        if (rejectionReason == null || rejectionReason.isBlank()) {
+            throw new BusinessValidationException("rejectionReason", "Rejection reason is required.");
+        }
+        if (rejectionReason.trim().length() > 255) {
+            throw new BusinessValidationException(
+                    "rejectionReason",
+                    "Rejection reason cannot exceed 255 characters.");
+        }
+
         Claim claim = getClaimEntity(claimId);
+        if (!"PENDING".equalsIgnoreCase(claim.getStatus())) {
+            throw new BusinessValidationException("status", "Only pending claims can be rejected.");
+        }
+
+        validateInsuranceDecisionOwner(claim);
         claim.setStatus("REJECTED");
         claim.setApprovalDate(null);
-        claim.setRejectionReason(rejectionReason);
+        claim.setRejectionReason(rejectionReason.trim());
         Claim savedClaim = claimRepository.save(claim);
-        sendClaimStatusEmail(savedClaim, "rejected", "Your claim has been rejected. Reason: " + rejectionReason);
+
+        sendClaimStatusEmail(
+                savedClaim,
+                "rejected",
+                "Your claim has been rejected. Reason: " + savedClaim.getRejectionReason());
+        log.info("Claim rejected claimId={} reason={}", claimId, savedClaim.getRejectionReason());
         return claimToDTO(savedClaim);
     }
 
     @Override
     public void deleteClaim(Integer claimId) {
-        claimRepository.delete(getClaimEntity(claimId));
+        Claim claim = getClaimEntity(claimId);
+        validateSubmitterOwnership(claim.getPatient(), claim.getInvoice());
+        List<ClaimDocumentDTO> documents = claimDocumentService.getDocuments(claimId);
+        documents.forEach(document -> claimDocumentService.deleteDocument(document.getDocumentId()));
+        claimRepository.delete(claim);
+        log.info("Claim deleted claimId={}", claimId);
+    }
+
+    private void validateCoverageAndRelationships(
+            ClaimDTO dto,
+            Patient patient,
+            Invoice invoice,
+            InsuranceCompany company,
+            PatientInsurance patientInsurance) {
+
+        if (invoice.getPatient() == null
+                || invoice.getPatient().getPatientId() != patient.getPatientId()) {
+            throw new BusinessValidationException(
+                    "invoiceId",
+                    "The selected invoice does not belong to the selected patient.");
+        }
+
+        if ("CANCELLED".equalsIgnoreCase(invoice.getStatus())) {
+            throw new BusinessValidationException("invoiceId", "A cancelled invoice cannot be claimed.");
+        }
+
+        if (patientInsurance.getPatient() == null
+                || patientInsurance.getPatient().getPatientId() != patient.getPatientId()) {
+            throw new BusinessValidationException(
+                    "enrollmentId",
+                    "The selected insurance policy does not belong to the patient.");
+        }
+
+        if (patientInsurance.getInsurancePlan() == null
+                || patientInsurance.getInsurancePlan().getInsuranceCompany() == null) {
+            throw new BusinessValidationException(
+                    "enrollmentId",
+                    "The selected insurance policy is not linked to an insurance company.");
+        }
+
+        int policyCompanyId = patientInsurance.getInsurancePlan().getInsuranceCompany().getCompanyId();
+        if (policyCompanyId != company.getCompanyId()) {
+            throw new BusinessValidationException(
+                    "enrollmentId",
+                    "The selected insurance company does not provide the selected policy.");
+        }
+
+        if (!"ACTIVE".equalsIgnoreCase(patientInsurance.getStatus())) {
+            throw new BusinessValidationException("enrollmentId", "The selected insurance policy is not active.");
+        }
+
+        if (!patientInsurance.getInsurancePlan().isActive()) {
+            throw new BusinessValidationException("enrollmentId", "The selected insurance plan is inactive.");
+        }
+
+        LocalDate today = LocalDate.now();
+        if (patientInsurance.getEnrollmentDate() == null
+                || patientInsurance.getExpiryDate() == null
+                || today.isBefore(patientInsurance.getEnrollmentDate())
+                || today.isAfter(patientInsurance.getExpiryDate())) {
+            throw new BusinessValidationException(
+                    "enrollmentId",
+                    "The selected insurance policy is outside its active date range.");
+        }
+
+        if (dto.getDateOfService().isBefore(patientInsurance.getEnrollmentDate())
+                || dto.getDateOfService().isAfter(patientInsurance.getExpiryDate())) {
+            throw new BusinessValidationException(
+                    "dateOfService",
+                    "Date of service must be within the insurance policy period.");
+        }
+
+        if (invoice.getTotalAmount() == null || invoice.getTotalAmount().compareTo(BigDecimal.ZERO) <= 0) {
+            throw new BusinessValidationException("invoiceId", "The selected invoice has no valid total amount.");
+        }
+
+        if (dto.getClaimAmount().compareTo(invoice.getTotalAmount()) > 0) {
+            throw new BusinessValidationException(
+                    "claimAmount",
+                    "Claim amount cannot exceed the invoice total of " + invoice.getTotalAmount() + ".");
+        }
+
+        BigDecimal coverageAmount = patientInsurance.getInsurancePlan().getCoverageAmount();
+        if (coverageAmount == null || coverageAmount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new BusinessValidationException("enrollmentId", "The selected plan has no valid coverage amount.");
+        }
+
+        if (dto.getClaimAmount().compareTo(coverageAmount) > 0) {
+            throw new BusinessValidationException(
+                    "claimAmount",
+                    "Claim amount cannot exceed the policy coverage of " + coverageAmount + ".");
+        }
+
+        BigDecimal approvedCoverageUsed = safeAmount(
+                claimRepository.sumApprovedAmountByEnrollmentId(patientInsurance.getEnrollmentId()));
+        BigDecimal remainingCoverage = coverageAmount.subtract(approvedCoverageUsed).max(BigDecimal.ZERO);
+        if (dto.getClaimAmount().compareTo(remainingCoverage) > 0) {
+            throw new BusinessValidationException(
+                    "claimAmount",
+                    "Claim amount exceeds the remaining policy coverage of " + remainingCoverage + ".");
+        }
+
+        if (claimRepository.existsByInvoiceInvoiceIdAndStatusIn(invoice.getInvoiceId(), ACTIVE_CLAIM_STATUSES)) {
+            throw new BusinessValidationException(
+                    "invoiceId",
+                    "A pending or approved claim already exists for this invoice.");
+        }
+    }
+
+    private void validateRemainingCoverageForApproval(Claim claim) {
+        PatientInsurance insurance = claim.getPatientInsurance();
+        if (insurance == null || insurance.getInsurancePlan() == null) {
+            throw new BusinessValidationException(
+                    "enrollmentId",
+                    "This claim is not linked to a valid insurance policy.");
+        }
+
+        BigDecimal coverage = insurance.getInsurancePlan().getCoverageAmount();
+        BigDecimal approved = safeAmount(
+                claimRepository.sumApprovedAmountByEnrollmentId(insurance.getEnrollmentId()));
+        BigDecimal requestedTotal = approved.add(claim.getClaimAmount());
+
+        if (requestedTotal.compareTo(coverage) > 0) {
+            BigDecimal remaining = coverage.subtract(approved).max(BigDecimal.ZERO);
+            throw new BusinessValidationException(
+                    "claimAmount",
+                    "Claim cannot be approved because only " + remaining + " coverage remains.");
+        }
+    }
+
+
+    private void validateReadAccess(Claim claim) {
+        if (!canCurrentUserRead(claim)) {
+            throw new AccessDeniedException("You are not allowed to view this claim.");
+        }
+    }
+
+    private boolean canCurrentUserRead(Claim claim) {
+        Authentication authentication = currentAuthentication();
+        if (authentication == null) {
+            return true;
+        }
+
+        Set<String> roles = authentication.getAuthorities().stream()
+                .map(authority -> authority.getAuthority())
+                .collect(java.util.stream.Collectors.toSet());
+        if (roles.contains("ROLE_ADMIN")) {
+            return true;
+        }
+
+        String email = authentication.getName();
+        boolean patientOwner = claim.getPatient() != null
+                && claim.getPatient().getAppUser() != null
+                && email.equalsIgnoreCase(claim.getPatient().getAppUser().getEmail());
+        boolean providerOwner = claim.getInvoice() != null
+                && claim.getInvoice().getHealthcareProvider() != null
+                && claim.getInvoice().getHealthcareProvider().getAppUser() != null
+                && email.equalsIgnoreCase(
+                        claim.getInvoice().getHealthcareProvider().getAppUser().getEmail());
+        boolean insuranceOwner = claim.getInsuranceCompany() != null
+                && claim.getInsuranceCompany().getAppUser() != null
+                && email.equalsIgnoreCase(claim.getInsuranceCompany().getAppUser().getEmail());
+
+        return patientOwner || providerOwner || insuranceOwner;
+    }
+
+    private void validateSubmitterOwnership(Patient patient, Invoice invoice) {
+        Authentication authentication = currentAuthentication();
+        if (authentication == null) {
+            return;
+        }
+
+        Set<String> roles = authentication.getAuthorities().stream()
+                .map(authority -> authority.getAuthority())
+                .collect(java.util.stream.Collectors.toSet());
+        String email = authentication.getName();
+
+        if (roles.contains("ROLE_ADMIN")) {
+            return;
+        }
+        if (roles.contains("ROLE_PATIENT")) {
+            if (patient.getAppUser() == null
+                    || !email.equalsIgnoreCase(patient.getAppUser().getEmail())) {
+                throw new AccessDeniedException("Patients can submit claims only for their own profile.");
+            }
+            return;
+        }
+        if (roles.contains("ROLE_PROVIDER")) {
+            if (invoice.getHealthcareProvider() == null
+                    || invoice.getHealthcareProvider().getAppUser() == null
+                    || !email.equalsIgnoreCase(invoice.getHealthcareProvider().getAppUser().getEmail())) {
+                throw new AccessDeniedException("Providers can submit claims only for invoices they generated.");
+            }
+            return;
+        }
+        throw new AccessDeniedException("You are not allowed to submit claims.");
+    }
+
+    private void validateInsuranceDecisionOwner(Claim claim) {
+        Authentication authentication = currentAuthentication();
+        if (authentication == null) {
+            return;
+        }
+
+        Set<String> roles = authentication.getAuthorities().stream()
+                .map(authority -> authority.getAuthority())
+                .collect(java.util.stream.Collectors.toSet());
+        if (roles.contains("ROLE_ADMIN")) {
+            return;
+        }
+
+        boolean ownsClaim = roles.contains("ROLE_INSURANCE")
+                && claim.getInsuranceCompany() != null
+                && claim.getInsuranceCompany().getAppUser() != null
+                && authentication.getName().equalsIgnoreCase(
+                        claim.getInsuranceCompany().getAppUser().getEmail());
+        if (!ownsClaim) {
+            throw new AccessDeniedException("Insurance companies can process only their own claims.");
+        }
+    }
+
+    private Authentication currentAuthentication() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null
+                || !authentication.isAuthenticated()
+                || "anonymousUser".equals(authentication.getPrincipal())) {
+            return null;
+        }
+        return authentication;
     }
 
     private Claim getClaimEntity(Integer claimId) {
@@ -121,6 +450,37 @@ public class ClaimServiceImpl implements IClaimService {
                 .orElseThrow(() -> new ResourceNotFoundException("Insurance company not found with id: " + companyId));
     }
 
+    private PatientInsurance getPatientInsurance(Integer enrollmentId) {
+        return patientInsuranceRepository.findById(enrollmentId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Insurance enrollment not found with id: " + enrollmentId));
+    }
+
+    private void sendClaimSubmittedEmails(Claim claim) {
+        try {
+            String patientEmail = claim.getPatient().getAppUser().getEmail();
+            mailService.sendSimpleEmail(
+                    patientEmail,
+                    "CareAssist claim submitted",
+                    "Your claim " + claim.getClaimId() + " was submitted successfully and is pending review.",
+                    "CareAssist Claims",
+                    getInsuranceReplyToEmail(claim));
+
+            String insuranceEmail = getInsuranceReplyToEmail(claim);
+            if (insuranceEmail != null && !insuranceEmail.equalsIgnoreCase(patientEmail)) {
+                mailService.sendSimpleEmail(
+                        insuranceEmail,
+                        "New CareAssist claim " + claim.getClaimId(),
+                        "A new claim was submitted by " + claim.getPatient().getFullName()
+                                + ". Claim amount: " + claim.getClaimAmount() + ".",
+                        "CareAssist - " + claim.getPatient().getFullName(),
+                        patientEmail);
+            }
+        } catch (Exception exception) {
+            log.error("Unable to send claim-submission notification claimId={}", claim.getClaimId(), exception);
+        }
+    }
+
     private void sendClaimStatusEmail(Claim claim, String statusText, String message) {
         try {
             String patientEmail = claim.getPatient().getAppUser().getEmail();
@@ -134,15 +494,24 @@ public class ClaimServiceImpl implements IClaimService {
                     "CareAssist - " + companyName,
                     companyReplyTo);
 
-            log.info("Claim status email sent claimId={} status={} patientEmail={} replyTo={}",
-                    claim.getClaimId(), statusText, patientEmail, companyReplyTo);
-        } catch (Exception ex) {
-            log.error("Unable to send claim status email claimId={} status={}", claim.getClaimId(), statusText, ex);
+            log.info(
+                    "Claim status email sent claimId={} status={} patientEmail={} replyTo={}",
+                    claim.getClaimId(),
+                    statusText,
+                    patientEmail,
+                    companyReplyTo);
+        } catch (Exception exception) {
+            log.error(
+                    "Unable to send claim status email claimId={} status={}",
+                    claim.getClaimId(),
+                    statusText,
+                    exception);
         }
     }
 
     private String getInsuranceDisplayName(Claim claim) {
-        if (claim.getInsuranceCompany() != null && claim.getInsuranceCompany().getCompanyName() != null
+        if (claim.getInsuranceCompany() != null
+                && claim.getInsuranceCompany().getCompanyName() != null
                 && !claim.getInsuranceCompany().getCompanyName().isBlank()) {
             return claim.getInsuranceCompany().getCompanyName();
         }
@@ -153,10 +522,12 @@ public class ClaimServiceImpl implements IClaimService {
         if (claim.getInsuranceCompany() == null) {
             return null;
         }
-        if (claim.getInsuranceCompany().getContactEmail() != null && !claim.getInsuranceCompany().getContactEmail().isBlank()) {
+        if (claim.getInsuranceCompany().getContactEmail() != null
+                && !claim.getInsuranceCompany().getContactEmail().isBlank()) {
             return claim.getInsuranceCompany().getContactEmail();
         }
-        if (claim.getInsuranceCompany().getAppUser() != null && claim.getInsuranceCompany().getAppUser().getEmail() != null
+        if (claim.getInsuranceCompany().getAppUser() != null
+                && claim.getInsuranceCompany().getAppUser().getEmail() != null
                 && !claim.getInsuranceCompany().getAppUser().getEmail().isBlank()) {
             return claim.getInsuranceCompany().getAppUser().getEmail();
         }
@@ -169,6 +540,9 @@ public class ClaimServiceImpl implements IClaimService {
         dto.setPatientId(claim.getPatient().getPatientId());
         dto.setInvoiceId(claim.getInvoice().getInvoiceId());
         dto.setCompanyId(claim.getInsuranceCompany().getCompanyId());
+        dto.setEnrollmentId(claim.getPatientInsurance() == null
+                ? null
+                : claim.getPatientInsurance().getEnrollmentId());
         dto.setDiagnosis(claim.getDiagnosis());
         dto.setTreatment(claim.getTreatment());
         dto.setDateOfService(claim.getDateOfService());
@@ -177,23 +551,38 @@ public class ClaimServiceImpl implements IClaimService {
         dto.setApprovalDate(claim.getApprovalDate());
         dto.setStatus(claim.getStatus());
         dto.setRejectionReason(claim.getRejectionReason());
+
+        dto.setPatientName(claim.getPatient().getFullName());
+        if (claim.getPatient().getAppUser() != null) {
+            dto.setPatientEmail(claim.getPatient().getAppUser().getEmail());
+        }
+        dto.setInvoiceNumber(claim.getInvoice().getInvoiceNumber());
+        dto.setInvoiceAmount(claim.getInvoice().getTotalAmount());
+        if (claim.getInvoice().getHealthcareProvider() != null) {
+            dto.setProviderId(claim.getInvoice().getHealthcareProvider().getProviderId());
+            dto.setProviderName(claim.getInvoice().getHealthcareProvider().getProviderName());
+        }
+        dto.setCompanyName(claim.getInsuranceCompany().getCompanyName());
+
+        if (claim.getPatientInsurance() != null
+                && claim.getPatientInsurance().getInsurancePlan() != null) {
+            dto.setPlanId(claim.getPatientInsurance().getInsurancePlan().getPlanId());
+            dto.setPlanName(claim.getPatientInsurance().getInsurancePlan().getPlanName());
+            BigDecimal coverage = safeAmount(
+                    claim.getPatientInsurance().getInsurancePlan().getCoverageAmount());
+            BigDecimal approved = safeAmount(
+                    claimRepository.sumApprovedAmountByEnrollmentId(
+                            claim.getPatientInsurance().getEnrollmentId()));
+            dto.setCoverageAmount(coverage);
+            dto.setApprovedCoverageUsed(approved);
+            dto.setRemainingCoverage(coverage.subtract(approved).max(BigDecimal.ZERO));
+        }
+
+        dto.setDocumentCount(claimDocumentRepository.countByClaimClaimId(claim.getClaimId()));
         return dto;
     }
 
-    private Claim claimToEntity(ClaimDTO dto) {
-        Claim claim = new Claim();
-        claim.setClaimId(dto.getClaimId());
-        claim.setPatient(getPatient(dto.getPatientId()));
-        claim.setInvoice(getInvoice(dto.getInvoiceId()));
-        claim.setInsuranceCompany(getCompany(dto.getCompanyId()));
-        claim.setDiagnosis(dto.getDiagnosis());
-        claim.setTreatment(dto.getTreatment());
-        claim.setDateOfService(dto.getDateOfService());
-        claim.setClaimAmount(dto.getClaimAmount());
-        claim.setSubmissionDate(dto.getSubmissionDate());
-        claim.setApprovalDate(dto.getApprovalDate());
-        claim.setStatus(dto.getStatus());
-        claim.setRejectionReason(dto.getRejectionReason());
-        return claim;
+    private BigDecimal safeAmount(BigDecimal value) {
+        return value == null ? BigDecimal.ZERO : value;
     }
 }

@@ -20,12 +20,16 @@ import com.hexaware.main.careassist.dto.ClaimDTO;
 import com.hexaware.main.careassist.dto.HealthcareProviderDTO;
 import com.hexaware.main.careassist.dto.InsuranceCompanyDTO;
 import com.hexaware.main.careassist.dto.InvoiceDTO;
+import com.hexaware.main.careassist.dto.InsurancePlanDTO;
+import com.hexaware.main.careassist.dto.PatientInsuranceDTO;
 import com.hexaware.main.careassist.dto.PatientDTO;
 import com.hexaware.main.careassist.dto.UserDTO;
 import com.hexaware.main.careassist.service.IClaimService;
 import com.hexaware.main.careassist.service.IHealthcareProviderService;
 import com.hexaware.main.careassist.service.IInsuranceCompanyService;
 import com.hexaware.main.careassist.service.IInvoiceService;
+import com.hexaware.main.careassist.service.IInsurancePlanService;
+import com.hexaware.main.careassist.service.IPatientInsuranceService;
 import com.hexaware.main.careassist.service.IPatientService;
 import com.hexaware.main.careassist.service.IUserService;
 
@@ -47,6 +51,12 @@ class ClaimServiceImplTest {
 
     @Autowired
     private IInvoiceService invoiceService;
+
+    @Autowired
+    private IInsurancePlanService insurancePlanService;
+
+    @Autowired
+    private IPatientInsuranceService patientInsuranceService;
 
     @Autowired
     private IClaimService claimService;
@@ -86,12 +96,16 @@ class ClaimServiceImplTest {
         PatientDTO patient = createPatient();
         HealthcareProviderDTO provider = createProvider();
         InsuranceCompanyDTO company = createCompany();
+        InsurancePlanDTO plan = createPlan(company.getCompanyId());
+        PatientInsuranceDTO enrollment = patientInsuranceService.selectInsurancePlan(
+                patientInsuranceDTO(patient.getPatientId(), plan.getPlanId()));
         InvoiceDTO invoice = invoiceService.generateInvoice(invoiceDTO(patient.getPatientId(), provider.getProviderId()));
 
         ClaimDTO dto = new ClaimDTO();
         dto.setPatientId(patient.getPatientId());
         dto.setInvoiceId(invoice.getInvoiceId());
         dto.setCompanyId(company.getCompanyId());
+        dto.setEnrollmentId(enrollment.getEnrollmentId());
         dto.setDiagnosis("Fever");
         dto.setTreatment("Medicine");
         dto.setDateOfService(LocalDate.now());
@@ -161,6 +175,28 @@ class ClaimServiceImplTest {
         company.setAddress("Chennai Tamil Nadu");
         company.setContactEmail("contact" + UUID.randomUUID() + "@gmail.com");
         return insuranceCompanyService.createCompanyProfile(company);
+    }
+
+    private InsurancePlanDTO createPlan(Integer companyId) {
+        InsurancePlanDTO plan = new InsurancePlanDTO();
+        plan.setCompanyId(companyId);
+        plan.setPlanName("Test Health Plan");
+        plan.setPlanDescription("Test plan used for claim coverage validation");
+        plan.setCoverageAmount(new BigDecimal("500000"));
+        plan.setPremiumAmount(new BigDecimal("10000"));
+        plan.setValidityMonths(12);
+        plan.setActive(true);
+        return insurancePlanService.createPlan(plan);
+    }
+
+    private PatientInsuranceDTO patientInsuranceDTO(Integer patientId, Integer planId) {
+        PatientInsuranceDTO dto = new PatientInsuranceDTO();
+        dto.setPatientId(patientId);
+        dto.setPlanId(planId);
+        dto.setEnrollmentDate(LocalDate.now().minusDays(1));
+        dto.setExpiryDate(LocalDate.now().plusYears(1));
+        dto.setStatus("ACTIVE");
+        return dto;
     }
 
     private InvoiceDTO invoiceDTO(Integer patientId, Integer providerId) {

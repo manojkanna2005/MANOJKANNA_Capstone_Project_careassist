@@ -1,71 +1,67 @@
-import { useEffect, useState } from "react";
-import Layout from "../common/Layout.jsx";
-import Message from "../common/Message.jsx";
-import { submitClaim } from "../../services/claimService.js";
-import { getPatientByUserId } from "../../services/patientService.js";
-import { getInvoicesByPatientId } from "../../services/invoiceService.js";
-import { getInsuranceHistoryByPatientId } from "../../services/patientInsuranceService.js";
-import { getPlanById } from "../../services/insurancePlanService.js";
-import { getAllCompanies } from "../../services/insuranceCompanyService.js";
-import { getUserId } from "../../utils/auth.js";
-import { nowDateTime, today } from "../../utils/date.js";
+import { useEffect, useMemo, useState } from 'react';
+import Layout from '../common/Layout.jsx';
+import Message from '../common/Message.jsx';
+import ClaimDocumentInput from '../common/ClaimDocumentInput.jsx';
+import { submitClaimWithDocuments } from '../../services/claimService.js';
+import { getPatientByUserId } from '../../services/patientService.js';
+import { getInvoicesByPatientId } from '../../services/invoiceService.js';
+import { getInsuranceHistoryByPatientId } from '../../services/patientInsuranceService.js';
+import { getUserId } from '../../utils/auth.js';
+import { today } from '../../utils/date.js';
 
 const empty = {
-  patientId: "",
-  invoiceId: "",
-  companyId: "",
-  diagnosis: "",
-  treatment: "",
+  patientId: '',
+  invoiceId: '',
+  enrollmentId: '',
+  companyId: '',
+  diagnosis: '',
+  treatment: '',
   dateOfService: today(),
-  claimAmount: "",
-  submissionDate: nowDateTime(),
-  approvalDate: "",
-  status: "PENDING",
-  rejectionReason: "",
+  claimAmount: '',
 };
+
+function isCurrentlyActive(policy) {
+  const current = today();
+  return (
+    String(policy.status).toUpperCase() === 'ACTIVE' &&
+    policy.planActive !== false &&
+    policy.enrollmentDate <= current &&
+    policy.expiryDate >= current
+  );
+}
 
 function SubmitClaim() {
   const [form, setForm] = useState(empty);
   const [invoices, setInvoices] = useState([]);
-  const [companies, setCompanies] = useState([]);
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
+  const [policies, setPolicies] = useState([]);
+  const [documents, setDocuments] = useState([]);
+  const [documentKey, setDocumentKey] = useState(0);
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
 
   useEffect(() => {
     async function load() {
       try {
         const patient = await getPatientByUserId(getUserId());
-        const [patientInvoices, insuranceHistory, companyList] =
-          await Promise.all([
-            getInvoicesByPatientId(patient.patientId).catch(() => []),
-            getInsuranceHistoryByPatientId(patient.patientId).catch(() => []),
-            getAllCompanies().catch(() => []),
-          ]);
+        const [patientInvoices, insuranceHistory] = await Promise.all([
+          getInvoicesByPatientId(patient.patientId).catch(() => []),
+          getInsuranceHistoryByPatientId(patient.patientId).catch(() => []),
+        ]);
 
-        const unpaidInvoices = patientInvoices.filter(
-          (invoice) => String(invoice.status).toUpperCase() !== "PAID",
+        setInvoices(
+          patientInvoices.filter(
+            (invoice) => String(invoice.status).toUpperCase() !== 'CANCELLED',
+          ),
         );
-        const active =
-          insuranceHistory.find((item) => item.status === "ACTIVE") ||
-          insuranceHistory[0];
-        let companyId = "";
-
-        if (active?.planId) {
-          const plan = await getPlanById(active.planId).catch(() => null);
-          companyId = plan?.companyId || "";
-        }
-
-        setInvoices(unpaidInvoices);
-        setCompanies(companyList);
-        setForm((prev) => ({
-          ...prev,
+        setPolicies(insuranceHistory.filter(isCurrentlyActive));
+        setForm((previous) => ({
+          ...previous,
           patientId: patient.patientId,
-          companyId,
         }));
-      } catch (err) {
+      } catch (loadError) {
         setError(
-          err.userMessage ||
-            "Complete patient profile and select an insurance plan before submitting claim.",
+          loadError.userMessage ||
+            'Complete your patient profile and select an active insurance plan before submitting a claim.',
         );
       }
     }
@@ -73,52 +69,89 @@ function SubmitClaim() {
     load();
   }, []);
 
-  const handleChange = (e) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
+  const selectedInvoice = useMemo(
+    () => invoices.find((invoice) => String(invoice.invoiceId) === String(form.invoiceId)),
+    [invoices, form.invoiceId],
+  );
+
+  const selectedPolicy = useMemo(
+    () => policies.find((policy) => String(policy.enrollmentId) === String(form.enrollmentId)),
+    [policies, form.enrollmentId],
+  );
+
+  const handleChange = (event) => {
+    setForm({ ...form, [event.target.name]: event.target.value });
   };
 
-  const handleInvoice = (e) => {
-    const invoiceId = e.target.value;
+  const handleInvoice = (event) => {
+    const invoiceId = event.target.value;
     const invoice = invoices.find(
       (item) => String(item.invoiceId) === String(invoiceId),
     );
     setForm({
       ...form,
       invoiceId,
-      claimAmount: invoice?.totalAmount || form.claimAmount,
+      claimAmount: invoice?.totalAmount || '',
     });
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setMessage("");
-    setError("");
+  const handlePolicy = (event) => {
+    const enrollmentId = event.target.value;
+    const policy = policies.find(
+      (item) => String(item.enrollmentId) === String(enrollmentId),
+    );
+    setForm({
+      ...form,
+      enrollmentId,
+      companyId: policy?.companyId || '',
+    });
+  };
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    setMessage('');
+    setError('');
 
     try {
-      await submitClaim({
-        ...form,
-        approvalDate: form.approvalDate || null,
-        rejectionReason: form.rejectionReason || null,
-      });
-      setMessage("Claim submitted successfully.");
-      setForm({
-        ...empty,
-        patientId: form.patientId,
-        companyId: form.companyId,
-      });
-    } catch (err) {
-      setError(err.userMessage || "Unable to submit claim");
+      await submitClaimWithDocuments(
+        {
+          ...form,
+          patientId: Number(form.patientId),
+          invoiceId: Number(form.invoiceId),
+          enrollmentId: Number(form.enrollmentId),
+          companyId: Number(form.companyId),
+          claimAmount: Number(form.claimAmount),
+          submissionDate: null,
+          approvalDate: null,
+          status: 'PENDING',
+          rejectionReason: null,
+        },
+        documents,
+      );
+
+      setMessage('Claim and medical documents submitted successfully.');
+      setForm({ ...empty, patientId: form.patientId });
+      setDocuments([]);
+      setDocumentKey((value) => value + 1);
+    } catch (submitError) {
+      setError(submitError.userMessage || 'Unable to submit claim.');
     }
   };
 
   return (
     <Layout
       title="Submit Claim"
-      subtitle="Submit claim after invoice generation."
+      subtitle="Select an active policy, attach medical documents, and submit your claim."
     >
       <div className="card page-card p-4">
         <Message type="success">{message}</Message>
         <Message type="danger">{error}</Message>
+
+        {policies.length === 0 && (
+          <div className="alert alert-warning">
+            No currently active insurance policy was found. Select or renew a plan first.
+          </div>
+        )}
 
         <form onSubmit={handleSubmit}>
           <div className="row">
@@ -141,32 +174,56 @@ function SubmitClaim() {
                 onChange={handleInvoice}
                 required
               >
-                <option value="">Select Invoice</option>
+                <option value="">Select invoice</option>
                 {invoices.map((invoice) => (
                   <option key={invoice.invoiceId} value={invoice.invoiceId}>
-                    {invoice.invoiceNumber} - {invoice.status} - ₹
-                    {invoice.totalAmount}
+                    {invoice.invoiceNumber} · {invoice.status} · ₹{invoice.totalAmount}
                   </option>
                 ))}
               </select>
             </div>
 
             <div className="col-md-4 mb-3">
-              <label className="form-label">Insurance Company</label>
+              <label className="form-label">Active Insurance Policy</label>
               <select
                 className="form-select"
-                name="companyId"
-                value={form.companyId}
-                onChange={handleChange}
+                name="enrollmentId"
+                value={form.enrollmentId}
+                onChange={handlePolicy}
                 required
               >
-                <option value="">Select company</option>
-                {companies.map((company) => (
-                  <option key={company.companyId} value={company.companyId}>
-                    {company.companyName} (Company ID: {company.companyId})
+                <option value="">Select active policy</option>
+                {policies.map((policy) => (
+                  <option key={policy.enrollmentId} value={policy.enrollmentId}>
+                    {policy.planName} · {policy.companyName} · coverage ₹{policy.coverageAmount}
                   </option>
                 ))}
               </select>
+            </div>
+          </div>
+
+          <div className="row">
+            <div className="col-md-6 mb-3">
+              <label className="form-label">Insurance Company</label>
+              <input
+                className="form-control"
+                name="companyId"
+                value={selectedPolicy?.companyName || ''}
+                readOnly
+                required
+              />
+            </div>
+            <div className="col-md-6 mb-3">
+              <label className="form-label">Policy Period</label>
+              <input
+                className="form-control"
+                value={
+                  selectedPolicy
+                    ? `${selectedPolicy.enrollmentDate} to ${selectedPolicy.expiryDate}`
+                    : ''
+                }
+                readOnly
+              />
             </div>
           </div>
 
@@ -178,6 +235,8 @@ function SubmitClaim() {
                 name="diagnosis"
                 value={form.diagnosis}
                 onChange={handleChange}
+                minLength="3"
+                maxLength="100"
                 required
               />
             </div>
@@ -188,13 +247,15 @@ function SubmitClaim() {
                 name="treatment"
                 value={form.treatment}
                 onChange={handleChange}
+                minLength="3"
+                maxLength="100"
                 required
               />
             </div>
           </div>
 
           <div className="row">
-            <div className="col-md-4 mb-3">
+            <div className="col-md-6 mb-3">
               <label className="form-label">Date of Service</label>
               <input
                 className="form-control"
@@ -202,10 +263,12 @@ function SubmitClaim() {
                 name="dateOfService"
                 value={form.dateOfService}
                 onChange={handleChange}
+                min={selectedPolicy?.enrollmentDate || undefined}
+                max={selectedPolicy ? (selectedPolicy.expiryDate < today() ? selectedPolicy.expiryDate : today()) : today()}
                 required
               />
             </div>
-            <div className="col-md-4 mb-3">
+            <div className="col-md-6 mb-3">
               <label className="form-label">Claim Amount</label>
               <input
                 className="form-control"
@@ -214,25 +277,35 @@ function SubmitClaim() {
                 value={form.claimAmount}
                 onChange={handleChange}
                 min="1"
+                max={
+                  selectedInvoice && selectedPolicy
+                    ? Math.min(
+                        Number(selectedInvoice.totalAmount),
+                        Number(selectedPolicy.coverageAmount),
+                      )
+                    : undefined
+                }
+                step="0.01"
                 required
               />
-            </div>
-            <div className="col-md-4 mb-3">
-              <label className="form-label">Status</label>
-              <select
-                className="form-select"
-                name="status"
-                value={form.status}
-                onChange={handleChange}
-              >
-                <option>PENDING</option>
-              </select>
+              {selectedInvoice && selectedPolicy && (
+                <div className="form-text">
+                  Invoice total: ₹{selectedInvoice.totalAmount}; policy coverage: ₹
+                  {selectedPolicy.coverageAmount}.
+                </div>
+              )}
             </div>
           </div>
 
+          <ClaimDocumentInput
+            key={documentKey}
+            files={documents}
+            onChange={(selected) => setDocuments(selected)}
+          />
+
           <button
             className="btn btn-primary"
-            disabled={!form.patientId || companies.length === 0}
+            disabled={!form.patientId || policies.length === 0}
           >
             Submit Claim
           </button>
