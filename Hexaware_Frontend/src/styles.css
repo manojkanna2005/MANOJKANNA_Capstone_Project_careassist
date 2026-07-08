@@ -47,13 +47,39 @@ body {
   min-height: 100vh;
   background: linear-gradient(180deg, #ff8a80, #ef5350);
   color: white;
-  transition: width 0.2s ease;
+  transition:
+    width 0.2s ease,
+    transform 0.25s ease;
   position: sticky;
   top: 0;
+  align-self: flex-start;
+  flex-shrink: 0;
+  z-index: 10;
 }
 
 .sidebar.closed {
   width: 82px;
+}
+
+.mobile-sidebar-toggle {
+  position: fixed;
+  top: 16px;
+  left: 16px;
+  z-index: 1001;
+  border: 0;
+  border-radius: 999px;
+  background: var(--ca-primary);
+  color: white;
+  width: 46px;
+  height: 46px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+}
+
+.sidebar-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  z-index: 999;
 }
 
 .sidebar a,
@@ -159,17 +185,32 @@ body {
 @media (max-width: 768px) {
   .app-shell {
     display: block;
+    position: relative;
   }
 
-  .sidebar,
+  .sidebar {
+    position: fixed;
+    left: 0;
+    top: 0;
+    height: 100vh;
+    width: 270px;
+    min-height: 100vh;
+    transform: translateX(-100%);
+    z-index: 1000;
+  }
+
+  .sidebar.open {
+    transform: translateX(0);
+  }
+
   .sidebar.closed {
-    width: 100%;
-    min-height: auto;
-    position: relative;
+    width: 270px;
+    transform: translateX(-100%);
   }
 
   .main-content {
     padding: 16px;
+    padding-top: 72px;
   }
 }
 
