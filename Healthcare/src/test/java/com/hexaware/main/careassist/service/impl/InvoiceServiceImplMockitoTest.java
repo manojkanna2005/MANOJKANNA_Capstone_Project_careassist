@@ -15,16 +15,17 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import com.hexaware.main.careassist.dto.InvoiceDTO;
-import com.hexaware.main.careassist.entity.HealthcareProvider;
-import com.hexaware.main.careassist.entity.Invoice;
-import com.hexaware.main.careassist.entity.Patient;
-import com.hexaware.main.careassist.repository.ClaimRepository;
-import com.hexaware.main.careassist.repository.ClaimPaymentRepository;
-import com.hexaware.main.careassist.repository.HealthcareProviderRepository;
-import com.hexaware.main.careassist.repository.InvoicePaymentRepository;
-import com.hexaware.main.careassist.repository.InvoiceRepository;
-import com.hexaware.main.careassist.repository.PatientRepository;
+import com.hexaware.careassist.dto.InvoiceDTO;
+import com.hexaware.careassist.entity.HealthcareProvider;
+import com.hexaware.careassist.entity.Invoice;
+import com.hexaware.careassist.entity.Patient;
+import com.hexaware.careassist.repository.ClaimPaymentRepository;
+import com.hexaware.careassist.repository.ClaimRepository;
+import com.hexaware.careassist.repository.HealthcareProviderRepository;
+import com.hexaware.careassist.repository.InvoicePaymentRepository;
+import com.hexaware.careassist.repository.InvoiceRepository;
+import com.hexaware.careassist.repository.PatientRepository;
+import com.hexaware.careassist.service.impl.InvoiceServiceImpl;
 
 @ExtendWith(MockitoExtension.class)
 class InvoiceServiceImplMockitoTest {

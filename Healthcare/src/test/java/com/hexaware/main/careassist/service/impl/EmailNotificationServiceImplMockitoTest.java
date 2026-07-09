@@ -14,12 +14,13 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import com.hexaware.main.careassist.dto.EmailNotificationDTO;
-import com.hexaware.main.careassist.entity.AppUser;
-import com.hexaware.main.careassist.entity.EmailNotification;
-import com.hexaware.main.careassist.repository.AppUserRepository;
-import com.hexaware.main.careassist.repository.EmailNotificationRepository;
-import com.hexaware.main.careassist.service.IMailService;
+import com.hexaware.careassist.dto.EmailNotificationDTO;
+import com.hexaware.careassist.entity.AppUser;
+import com.hexaware.careassist.entity.EmailNotification;
+import com.hexaware.careassist.repository.AppUserRepository;
+import com.hexaware.careassist.repository.EmailNotificationRepository;
+import com.hexaware.careassist.service.IMailService;
+import com.hexaware.careassist.service.impl.EmailNotificationServiceImpl;
 
 @ExtendWith(MockitoExtension.class)
 class EmailNotificationServiceImplMockitoTest {

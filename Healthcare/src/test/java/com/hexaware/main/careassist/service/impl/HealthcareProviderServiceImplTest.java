@@ -14,10 +14,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.hexaware.main.careassist.dto.HealthcareProviderDTO;
-import com.hexaware.main.careassist.dto.UserDTO;
-import com.hexaware.main.careassist.service.IHealthcareProviderService;
-import com.hexaware.main.careassist.service.IUserService;
+import com.hexaware.careassist.dto.HealthcareProviderDTO;
+import com.hexaware.careassist.dto.UserDTO;
+import com.hexaware.careassist.service.IHealthcareProviderService;
+import com.hexaware.careassist.service.IUserService;
 
 @SpringBootTest
 @Transactional

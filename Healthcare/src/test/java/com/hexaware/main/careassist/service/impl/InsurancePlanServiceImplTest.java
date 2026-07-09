@@ -15,12 +15,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.hexaware.main.careassist.dto.InsuranceCompanyDTO;
-import com.hexaware.main.careassist.dto.InsurancePlanDTO;
-import com.hexaware.main.careassist.dto.UserDTO;
-import com.hexaware.main.careassist.service.IInsuranceCompanyService;
-import com.hexaware.main.careassist.service.IInsurancePlanService;
-import com.hexaware.main.careassist.service.IUserService;
+import com.hexaware.careassist.dto.InsuranceCompanyDTO;
+import com.hexaware.careassist.dto.InsurancePlanDTO;
+import com.hexaware.careassist.dto.UserDTO;
+import com.hexaware.careassist.service.IInsuranceCompanyService;
+import com.hexaware.careassist.service.IInsurancePlanService;
+import com.hexaware.careassist.service.IUserService;
 
 @SpringBootTest
 @Transactional

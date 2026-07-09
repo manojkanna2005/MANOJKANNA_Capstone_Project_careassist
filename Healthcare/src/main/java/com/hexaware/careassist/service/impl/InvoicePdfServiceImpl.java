@@ -1,0 +1,244 @@
+package com.hexaware.careassist.service.impl;
+
+import lombok.extern.slf4j.Slf4j;
+import java.io.ByteArrayOutputStream;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.format.DateTimeFormatter;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import com.hexaware.careassist.entity.ClaimPayment;
+import com.hexaware.careassist.entity.Invoice;
+import com.hexaware.careassist.entity.InvoicePayment;
+import com.hexaware.careassist.exception.ResourceNotFoundException;
+import com.hexaware.careassist.repository.ClaimPaymentRepository;
+import com.hexaware.careassist.repository.InvoicePaymentRepository;
+import com.hexaware.careassist.repository.InvoiceRepository;
+import com.hexaware.careassist.service.IInvoicePdfService;
+import com.hexaware.careassist.service.IMailService;
+import com.lowagie.text.Document;
+import com.lowagie.text.Element;
+import com.lowagie.text.Font;
+import com.lowagie.text.FontFactory;
+import com.lowagie.text.PageSize;
+import com.lowagie.text.Paragraph;
+import com.lowagie.text.Phrase;
+import com.lowagie.text.pdf.PdfPCell;
+import com.lowagie.text.pdf.PdfPTable;
+import com.lowagie.text.pdf.PdfWriter;
+
+@Service
+@Transactional(readOnly = true)
+@Slf4j
+public class InvoicePdfServiceImpl implements IInvoicePdfService {
+    private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("dd-MMM-yyyy");
+
+    @Autowired
+    private InvoiceRepository invoiceRepository;
+
+    @Autowired
+    private ClaimPaymentRepository claimPaymentRepository;
+
+    @Autowired
+    private InvoicePaymentRepository invoicePaymentRepository;
+
+    @Autowired
+    private IMailService mailService;
+
+    @Override
+    public byte[] generateInvoicePdf(Integer invoiceId) {
+        Invoice invoice = getInvoice(invoiceId);
+
+        try (ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
+            Document document = new Document(PageSize.A4);
+            PdfWriter.getInstance(document, outputStream);
+            document.open();
+
+            Font titleFont = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 18);
+            Font headingFont = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 12);
+            Font normalFont = FontFactory.getFont(FontFactory.HELVETICA, 10);
+
+            Paragraph title = new Paragraph("CareAssist Invoice", titleFont);
+            title.setAlignment(Element.ALIGN_CENTER);
+            document.add(title);
+            document.add(new Paragraph(" "));
+
+            document.add(new Paragraph("Invoice Number: " + safe(invoice.getInvoiceNumber()), headingFont));
+            document.add(new Paragraph("Invoice Date: " + formatDate(invoice.getInvoiceDate()), normalFont));
+            document.add(new Paragraph("Due Date: " + formatDate(invoice.getDueDate()), normalFont));
+            document.add(new Paragraph("Status: " + safe(invoice.getStatus()), normalFont));
+            document.add(new Paragraph(" "));
+
+            document.add(new Paragraph("Patient Details", headingFont));
+            document.add(new Paragraph("Patient ID: " + invoice.getPatient().getPatientId(), normalFont));
+            document.add(new Paragraph("Patient Name: " + safe(invoice.getPatient().getFullName()), normalFont));
+            document.add(new Paragraph("Patient Address: " + safe(invoice.getPatient().getAddress()), normalFont));
+            document.add(new Paragraph(" "));
+
+            document.add(new Paragraph("Healthcare Provider", headingFont));
+            document.add(new Paragraph("Provider ID: " + invoice.getHealthcareProvider().getProviderId(), normalFont));
+            document.add(new Paragraph("Provider Name: " + safe(invoice.getHealthcareProvider().getProviderName()), normalFont));
+            document.add(new Paragraph("Specialization: " + safe(invoice.getHealthcareProvider().getSpecialization()), normalFont));
+            document.add(new Paragraph(" "));
+
+            PdfPTable table = new PdfPTable(2);
+            table.setWidthPercentage(100);
+            table.setWidths(new float[] { 70, 30 });
+            addHeader(table, "Fee Description");
+            addHeader(table, "Amount");
+            addRow(table, "Consultation Fee", invoice.getConsultationFee());
+            addRow(table, "Diagnostic Tests Fee", invoice.getDiagnosticTestsFee());
+            addRow(table, "Diagnostic Scan Fee", invoice.getDiagnosticScanFee());
+            addRow(table, "Prescribed Medications Bill Amount", invoice.getMedicationsFee());
+            addRow(table, "Tax (" + money(invoice.getTaxPercentage()) + "%)", calculateTaxAmount(invoice));
+            BigDecimal invoiceTotal = nonNull(invoice.getTotalAmount()).compareTo(BigDecimal.ZERO) > 0
+                    ? nonNull(invoice.getTotalAmount())
+                    : calculateTotalAmount(invoice);
+            addRow(table, "Invoice Total", invoiceTotal);
+
+            ClaimPayment insurancePayment = claimPaymentRepository
+                    .findFirstByClaimInvoiceInvoiceIdOrderByPaymentIdDesc(invoiceId)
+                    .orElse(null);
+            InvoicePayment patientPayment = invoicePaymentRepository
+                    .findByInvoiceInvoiceId(invoiceId)
+                    .orElse(null);
+            BigDecimal insurancePaid = insurancePayment == null
+                    ? BigDecimal.ZERO
+                    : nonNull(insurancePayment.getPaymentAmount());
+            BigDecimal patientPaid = patientPayment == null
+                    ? BigDecimal.ZERO
+                    : nonNull(patientPayment.getPaymentAmount());
+            BigDecimal remaining = invoiceTotal
+                    .subtract(insurancePaid)
+                    .subtract(patientPaid)
+                    .max(BigDecimal.ZERO);
+
+            addRow(table, "Insurance Paid", insurancePaid);
+            addRow(table, "Patient Paid", patientPaid);
+            addRow(table, "Remaining Balance", remaining);
+            document.add(table);
+
+            if (insurancePayment != null) {
+                document.add(new Paragraph(" "));
+                document.add(new Paragraph(
+                        "Insurance Reference: " + safe(insurancePayment.getTransactionReference()),
+                        normalFont));
+            }
+            if (patientPayment != null) {
+                document.add(new Paragraph(
+                        "Patient Payment Reference: " + safe(patientPayment.getTransactionReference()),
+                        normalFont));
+            }
+
+            document.add(new Paragraph(" "));
+            document.add(new Paragraph("Generated by CareAssist Medical Billing and Claims Management System.", normalFont));
+            document.close();
+
+            log.info("Invoice PDF generated invoiceId={}", invoiceId);
+            return outputStream.toByteArray();
+        } catch (Exception ex) {
+            log.error("Failed to generate invoice PDF invoiceId={}", invoiceId, ex);
+            throw new IllegalStateException("Unable to generate invoice PDF");
+        }
+    }
+
+    @Override
+    public void emailInvoicePdf(Integer invoiceId, String emailOverride) {
+        Invoice invoice = getInvoice(invoiceId);
+        String email = emailOverride;
+
+        if (email == null || email.isBlank()) {
+            email = invoice.getPatient().getAppUser().getEmail();
+        }
+
+        byte[] pdf = generateInvoicePdf(invoiceId);
+        String providerName = getProviderDisplayName(invoice);
+        String providerEmail = getProviderReplyToEmail(invoice);
+
+        mailService.sendEmailWithAttachment(
+                email,
+                "CareAssist Invoice " + safe(invoice.getInvoiceNumber()),
+                "Please find your invoice PDF attached. You can reply to this email to contact your healthcare provider.",
+                "invoice-" + invoice.getInvoiceNumber() + ".pdf",
+                pdf,
+                "CareAssist - " + providerName,
+                providerEmail);
+        log.info("Invoice PDF email requested invoiceId={} email={} providerReplyTo={}", invoiceId, email, providerEmail);
+    }
+
+    private String getProviderDisplayName(Invoice invoice) {
+        if (invoice.getHealthcareProvider() != null && invoice.getHealthcareProvider().getProviderName() != null
+                && !invoice.getHealthcareProvider().getProviderName().isBlank()) {
+            return invoice.getHealthcareProvider().getProviderName();
+        }
+        return "Healthcare Provider";
+    }
+
+    private String getProviderReplyToEmail(Invoice invoice) {
+        if (invoice.getHealthcareProvider() != null && invoice.getHealthcareProvider().getAppUser() != null
+                && invoice.getHealthcareProvider().getAppUser().getEmail() != null
+                && !invoice.getHealthcareProvider().getAppUser().getEmail().isBlank()) {
+            return invoice.getHealthcareProvider().getAppUser().getEmail();
+        }
+        return null;
+    }
+
+    private Invoice getInvoice(Integer invoiceId) {
+        return invoiceRepository.findById(invoiceId)
+                .orElseThrow(() -> new ResourceNotFoundException("Invoice not found with id: " + invoiceId));
+    }
+
+    private void addHeader(PdfPTable table, String text) {
+        PdfPCell cell = new PdfPCell(new Phrase(text, FontFactory.getFont(FontFactory.HELVETICA_BOLD, 11)));
+        cell.setHorizontalAlignment(Element.ALIGN_CENTER);
+        cell.setPadding(8);
+        table.addCell(cell);
+    }
+
+    private void addRow(PdfPTable table, String label, BigDecimal value) {
+        PdfPCell labelCell = new PdfPCell(new Phrase(label));
+        labelCell.setPadding(7);
+        table.addCell(labelCell);
+
+        PdfPCell valueCell = new PdfPCell(new Phrase("Rs. " + money(value)));
+        valueCell.setHorizontalAlignment(Element.ALIGN_RIGHT);
+        valueCell.setPadding(7);
+        table.addCell(valueCell);
+    }
+
+    private String formatDate(java.time.LocalDate date) {
+        return date == null ? "-" : DATE_FORMATTER.format(date);
+    }
+
+    private String safe(String value) {
+        return value == null ? "-" : value;
+    }
+
+    private String money(BigDecimal value) {
+        return nonNull(value).setScale(2, RoundingMode.HALF_UP).toPlainString();
+    }
+
+    private BigDecimal calculateBillAmount(Invoice invoice) {
+        return nonNull(invoice.getConsultationFee())
+                .add(nonNull(invoice.getDiagnosticTestsFee()))
+                .add(nonNull(invoice.getDiagnosticScanFee()))
+                .add(nonNull(invoice.getMedicationsFee()));
+    }
+
+    private BigDecimal calculateTaxAmount(Invoice invoice) {
+        return calculateBillAmount(invoice)
+                .multiply(nonNull(invoice.getTaxPercentage()))
+                .divide(new BigDecimal("100"), 2, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal calculateTotalAmount(Invoice invoice) {
+        return calculateBillAmount(invoice).add(calculateTaxAmount(invoice));
+    }
+
+    private BigDecimal nonNull(BigDecimal value) {
+        return value == null ? BigDecimal.ZERO : value;
+    }
+}

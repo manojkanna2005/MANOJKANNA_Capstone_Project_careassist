@@ -15,12 +15,13 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.mock.web.MockMultipartFile;
 
-import com.hexaware.main.careassist.dto.ClaimDocumentDTO;
-import com.hexaware.main.careassist.entity.Claim;
-import com.hexaware.main.careassist.entity.ClaimDocument;
-import com.hexaware.main.careassist.exception.BusinessValidationException;
-import com.hexaware.main.careassist.repository.ClaimDocumentRepository;
-import com.hexaware.main.careassist.repository.ClaimRepository;
+import com.hexaware.careassist.dto.ClaimDocumentDTO;
+import com.hexaware.careassist.entity.Claim;
+import com.hexaware.careassist.entity.ClaimDocument;
+import com.hexaware.careassist.exception.BusinessValidationException;
+import com.hexaware.careassist.repository.ClaimDocumentRepository;
+import com.hexaware.careassist.repository.ClaimRepository;
+import com.hexaware.careassist.service.impl.ClaimDocumentServiceImpl;
 
 class ClaimDocumentServiceImplMockitoTest {
 

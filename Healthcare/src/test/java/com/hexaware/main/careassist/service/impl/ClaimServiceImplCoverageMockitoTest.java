@@ -18,26 +18,27 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import com.hexaware.main.careassist.dto.ClaimDTO;
-import com.hexaware.main.careassist.entity.AppUser;
-import com.hexaware.main.careassist.entity.Claim;
-import com.hexaware.main.careassist.entity.HealthcareProvider;
-import com.hexaware.main.careassist.entity.InsuranceCompany;
-import com.hexaware.main.careassist.entity.InsurancePlan;
-import com.hexaware.main.careassist.entity.Invoice;
-import com.hexaware.main.careassist.entity.Patient;
-import com.hexaware.main.careassist.entity.PatientInsurance;
-import com.hexaware.main.careassist.exception.BusinessValidationException;
-import com.hexaware.main.careassist.repository.ClaimDocumentRepository;
-import com.hexaware.main.careassist.repository.ClaimPaymentRepository;
-import com.hexaware.main.careassist.repository.ClaimRepository;
-import com.hexaware.main.careassist.repository.InsuranceCompanyRepository;
-import com.hexaware.main.careassist.repository.InvoicePaymentRepository;
-import com.hexaware.main.careassist.repository.InvoiceRepository;
-import com.hexaware.main.careassist.repository.PatientInsuranceRepository;
-import com.hexaware.main.careassist.repository.PatientRepository;
-import com.hexaware.main.careassist.service.IClaimDocumentService;
-import com.hexaware.main.careassist.service.IMailService;
+import com.hexaware.careassist.dto.ClaimDTO;
+import com.hexaware.careassist.entity.AppUser;
+import com.hexaware.careassist.entity.Claim;
+import com.hexaware.careassist.entity.HealthcareProvider;
+import com.hexaware.careassist.entity.InsuranceCompany;
+import com.hexaware.careassist.entity.InsurancePlan;
+import com.hexaware.careassist.entity.Invoice;
+import com.hexaware.careassist.entity.Patient;
+import com.hexaware.careassist.entity.PatientInsurance;
+import com.hexaware.careassist.exception.BusinessValidationException;
+import com.hexaware.careassist.repository.ClaimDocumentRepository;
+import com.hexaware.careassist.repository.ClaimPaymentRepository;
+import com.hexaware.careassist.repository.ClaimRepository;
+import com.hexaware.careassist.repository.InsuranceCompanyRepository;
+import com.hexaware.careassist.repository.InvoicePaymentRepository;
+import com.hexaware.careassist.repository.InvoiceRepository;
+import com.hexaware.careassist.repository.PatientInsuranceRepository;
+import com.hexaware.careassist.repository.PatientRepository;
+import com.hexaware.careassist.service.IClaimDocumentService;
+import com.hexaware.careassist.service.IMailService;
+import com.hexaware.careassist.service.impl.ClaimServiceImpl;
 
 @ExtendWith(MockitoExtension.class)
 class ClaimServiceImplCoverageMockitoTest {

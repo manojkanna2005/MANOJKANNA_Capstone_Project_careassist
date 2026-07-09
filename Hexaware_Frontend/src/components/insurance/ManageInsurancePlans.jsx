@@ -9,6 +9,7 @@ import {
   getPlansByCompanyId,
   activatePlan,
   deactivatePlan,
+  deletePlan,
 } from "../../services/insurancePlanService.js";
 import { money } from "../../utils/date.js";
 
@@ -22,7 +23,8 @@ const empty = {
   validityMonths: "12",
   active: true,
 };
-const hasAtMostTwoDecimals = (value) => /^\d+(?:\.\d{1,2})?$/.test(String(value));
+const hasAtMostTwoDecimals = (value) =>
+  /^\d+(?:\.\d{1,2})?$/.test(String(value));
 
 function ManageInsurancePlans() {
   const [form, setForm] = useState(empty);
@@ -93,6 +95,9 @@ function ManageInsurancePlans() {
     if (!hasAtMostTwoDecimals(premiumText) || premium > MAX_MONEY) {
       return "Premium amount must be within range and use at most 2 decimal places.";
     }
+    if (premium > coverage) {
+      return "Premium amount cannot exceed coverage amount.";
+    }
     if (!Number.isInteger(months) || months < 1 || months > 120) {
       return "Validity months must be a whole number between 1 and 120.";
     }
@@ -144,10 +149,24 @@ function ManageInsurancePlans() {
     }
   };
 
+  const handleDelete = async (plan) => {
+    if (!window.confirm(`Delete plan "${plan.planName}"?`)) return;
+
+    setError("");
+    setMessage("");
+    try {
+      await deletePlan(plan.planId);
+      setMessage("Plan deleted successfully.");
+      await load();
+    } catch (deleteError) {
+      setError(deleteError.userMessage || "Unable to delete plan.");
+    }
+  };
+
   return (
     <Layout
       title="Manage Insurance Plans"
-      subtitle="Coverage and premium amounts must be positive and use no more than 2 decimal places."
+      subtitle="Coverage and premium amounts must be positive, use no more than 2 decimal places, and keep the premium at or below the coverage amount."
     >
       <Message type="success">{message}</Message>
       <Message type="danger">{error}</Message>
@@ -157,7 +176,9 @@ function ManageInsurancePlans() {
         <form onSubmit={handleSubmit}>
           <div className="row">
             <div className="col-md-4 mb-3">
-              <label className="form-label" htmlFor="companyId">Company ID</label>
+              <label className="form-label" htmlFor="companyId">
+                Company ID
+              </label>
               <input
                 id="companyId"
                 className="form-control"
@@ -167,7 +188,9 @@ function ManageInsurancePlans() {
               />
             </div>
             <div className="col-md-4 mb-3">
-              <label className="form-label" htmlFor="planName">Plan Name</label>
+              <label className="form-label" htmlFor="planName">
+                Plan Name
+              </label>
               <input
                 id="planName"
                 className="form-control"
@@ -181,7 +204,9 @@ function ManageInsurancePlans() {
               />
             </div>
             <div className="col-md-4 mb-3">
-              <label className="form-label" htmlFor="validityMonths">Validity Months</label>
+              <label className="form-label" htmlFor="validityMonths">
+                Validity Months
+              </label>
               <input
                 id="validityMonths"
                 className="form-control"
@@ -199,7 +224,9 @@ function ManageInsurancePlans() {
           </div>
 
           <div className="mb-3">
-            <label className="form-label" htmlFor="planDescription">Description</label>
+            <label className="form-label" htmlFor="planDescription">
+              Description
+            </label>
             <textarea
               id="planDescription"
               className="form-control"
@@ -219,7 +246,9 @@ function ManageInsurancePlans() {
 
           <div className="row">
             <div className="col-md-6 mb-3">
-              <label className="form-label" htmlFor="coverageAmount">Coverage Amount</label>
+              <label className="form-label" htmlFor="coverageAmount">
+                Coverage Amount
+              </label>
               <input
                 id="coverageAmount"
                 className="form-control"
@@ -236,7 +265,9 @@ function ManageInsurancePlans() {
               />
             </div>
             <div className="col-md-6 mb-3">
-              <label className="form-label" htmlFor="premiumAmount">Premium Amount</label>
+              <label className="form-label" htmlFor="premiumAmount">
+                Premium Amount
+              </label>
               <input
                 id="premiumAmount"
                 className="form-control"
@@ -288,14 +319,24 @@ function ManageInsurancePlans() {
             },
           ]}
           actions={(row) => (
-            <button
-              type="button"
-              className="btn btn-sm btn-outline-primary"
-              onClick={() => toggle(row)}
-              disabled={loading || saving}
-            >
-              {row.active ? "Deactivate" : "Activate"}
-            </button>
+            <div className="d-flex gap-2">
+              <button
+                type="button"
+                className="btn btn-sm btn-outline-primary"
+                onClick={() => toggle(row)}
+                disabled={loading || saving}
+              >
+                {row.active ? "Deactivate" : "Activate"}
+              </button>
+              <button
+                type="button"
+                className="btn btn-sm btn-outline-danger"
+                onClick={() => handleDelete(row)}
+                disabled={loading || saving}
+              >
+                Delete
+              </button>
+            </div>
           )}
         />
       </div>

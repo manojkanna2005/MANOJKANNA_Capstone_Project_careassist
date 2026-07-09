@@ -18,12 +18,13 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
-import com.hexaware.main.careassist.dto.UserAccountUpdateRequest;
-import com.hexaware.main.careassist.dto.UserDTO;
-import com.hexaware.main.careassist.entity.AppUser;
-import com.hexaware.main.careassist.repository.AppUserRepository;
-import com.hexaware.main.careassist.security.JwtUtil;
-import com.hexaware.main.careassist.service.IMailService;
+import com.hexaware.careassist.dto.UserAccountUpdateRequest;
+import com.hexaware.careassist.dto.UserDTO;
+import com.hexaware.careassist.entity.AppUser;
+import com.hexaware.careassist.repository.AppUserRepository;
+import com.hexaware.careassist.security.JwtUtil;
+import com.hexaware.careassist.service.IMailService;
+import com.hexaware.careassist.service.impl.UserServiceImpl;
 
 @ExtendWith(MockitoExtension.class)
 class UserServiceImplMockitoTest {
