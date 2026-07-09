@@ -7,12 +7,14 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 import com.hexaware.main.careassist.dto.EmailNotificationDTO;
 import com.hexaware.main.careassist.dto.ForgotPasswordRequest;
@@ -54,7 +56,9 @@ public class AuthController {
     public ResponseEntity<UserDTO> register(@Valid @RequestBody UserDTO dto) {
 
         if (dto.getRole() != null && dto.getRole().equalsIgnoreCase("ADMIN")) {
-            throw new IllegalArgumentException("Admin cannot be registered from public register API");
+            throw new IllegalArgumentException(
+                    "Admin cannot be registered from public register API"
+            );
         }
 
         UserDTO savedUser = userService.createUser(dto);
@@ -62,16 +66,20 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
+    public ResponseEntity<LoginResponse> login(
+            @Valid @RequestBody LoginRequest request) {
 
         authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword())
+                new UsernamePasswordAuthenticationToken(
+                        request.getEmail(),
+                        request.getPassword()
+                )
         );
 
         AppUser user = appUserRepository.findByEmail(request.getEmail())
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
-        String role = jwtUtil.normalizeRole(user.getRole());
+        //String role = jwtUtil.normalizeRole(user.getRole());
         String token = jwtUtil.generateToken(user);
 
         EmailNotificationDTO notification = new EmailNotificationDTO();
@@ -82,35 +90,62 @@ public class AuthController {
         notification.setStatus("PENDING");
         emailNotificationService.createNotification(notification);
 
-        LoginResponse response = new LoginResponse(
-                token,
-                "Bearer",
-                user.getUserId(),
-                user.getUsername(),
-                user.getEmail(),
-                role,
-                user.getProfilePicture()
-        );
+        return ResponseEntity.ok(toLoginResponse(user, token));
+    }
 
-        return ResponseEntity.ok(response);
+    @GetMapping("/me")
+    public ResponseEntity<LoginResponse> getCurrentUser(
+            Authentication authentication) {
+
+        if (authentication == null || !authentication.isAuthenticated()) {
+            throw new ResponseStatusException(
+                    HttpStatus.UNAUTHORIZED,
+                    "Authentication is required"
+            );
+        }
+
+        AppUser user = appUserRepository
+                .findByEmailIgnoreCase(authentication.getName())
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Authenticated user was not found"
+                ));
+
+        return ResponseEntity.ok(toLoginResponse(user, null));
     }
 
     @PostMapping("/forgot-password")
-    public ResponseEntity<String> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
+    public ResponseEntity<String> forgotPassword(
+            @Valid @RequestBody ForgotPasswordRequest request) {
         return ResponseEntity.ok(userService.forgotPassword(request.getEmail()));
     }
 
     @PostMapping("/logout")
-    public ResponseEntity<String> logout(@RequestHeader("Authorization") String authHeader) {
+    public ResponseEntity<String> logout(
+            @RequestHeader("Authorization") String authHeader) {
+
         if (authHeader != null && authHeader.startsWith("Bearer ")) {
             String token = authHeader.substring(7);
             tokenBlacklistService.blacklistToken(token);
         }
+
         return ResponseEntity.ok("Logout successful. Token blacklisted.");
     }
 
     @GetMapping("/test")
     public String testAuthApi() {
         return "Auth API v1 is working";
+    }
+
+    private LoginResponse toLoginResponse(AppUser user, String token) {
+        return new LoginResponse(
+                token,
+                "Bearer",
+                user.getUserId(),
+                user.getUsername(),
+                user.getEmail(),
+                jwtUtil.normalizeRole(user.getRole()),
+                user.getProfilePicture()
+        );
     }
 }

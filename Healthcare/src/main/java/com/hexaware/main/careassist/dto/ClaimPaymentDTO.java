@@ -3,8 +3,15 @@ package com.hexaware.main.careassist.dto;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
-import jakarta.validation.constraints.*;
-import lombok.*;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.Size;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 @Getter
 @Setter
@@ -12,23 +19,32 @@ import lombok.*;
 @AllArgsConstructor
 public class ClaimPaymentDTO {
 
-	private int paymentId;
+    private int paymentId;
 
-	@NotNull(message = "Claim ID is required")
-	private Integer claimId;
+    @NotNull(message = "Claim ID is required")
+    @Positive(message = "Claim ID must be greater than 0")
+    private Integer claimId;
 
-	@NotNull(message = "Payment date is required")
-	private LocalDateTime paymentDate;
+    private Integer invoiceId;
+    private String invoiceNumber;
+    private Integer patientId;
+    private String patientName;
+    private Integer companyId;
+    private String companyName;
+    private BigDecimal approvedAmount;
+    private LocalDateTime paymentDate;
+    private BigDecimal paymentAmount;
 
-	@NotNull(message = "Payment amount is required")
-	@DecimalMin(value = "1.0", message = "Payment amount must be greater than 0")
-	private BigDecimal paymentAmount;
+    @NotBlank(message = "Payment mode is required")
+    @Pattern(
+            regexp = "CASH|CARD|UPI|NET_BANKING|CHEQUE",
+            flags = Pattern.Flag.CASE_INSENSITIVE,
+            message = "Payment mode must be CASH, CARD, UPI, NET_BANKING, or CHEQUE")
+    private String paymentMode;
 
-	@NotBlank(message = "Payment mode is required")
-	@Pattern(regexp = "CASH|CARD|UPI|NET_BANKING|CHEQUE", message = "Payment mode must be CASH, CARD, UPI, NET_BANKING, or CHEQUE")
-	private String paymentMode;
-
-	@NotBlank(message = "Transaction reference is required")
-	@Size(min = 5, max = 50, message = "Transaction reference must be between 5 and 50 characters")
-	private String transactionReference;
+    @Size(max = 60, message = "Transaction reference cannot exceed 60 characters")
+    @Pattern(
+            regexp = "^$|^[A-Za-z0-9][A-Za-z0-9/_-]{5,59}$",
+            message = "Transaction reference must be 6-60 characters using only letters, numbers, slash, underscore, or hyphen")
+    private String transactionReference;
 }

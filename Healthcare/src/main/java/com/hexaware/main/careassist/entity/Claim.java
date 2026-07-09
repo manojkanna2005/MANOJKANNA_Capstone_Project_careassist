@@ -42,8 +42,8 @@ public class Claim {
     @JoinColumn(name = "company_id", nullable = false)
     private InsuranceCompany insuranceCompany;
 
-    @ManyToOne
-    @JoinColumn(name = "enrollment_id")
+    @ManyToOne(optional = false)
+    @JoinColumn(name = "enrollment_id", nullable = false)
     private PatientInsurance patientInsurance;
 
     @Column(name = "diagnosis", nullable = false)
@@ -57,6 +57,9 @@ public class Claim {
 
     @Column(name = "claim_amount", nullable = false, precision = 12, scale = 2)
     private BigDecimal claimAmount;
+
+    @Column(name = "approved_amount", precision = 12, scale = 2)
+    private BigDecimal approvedAmount;
 
     @Column(name = "submission_date", nullable = false)
     private LocalDateTime submissionDate;

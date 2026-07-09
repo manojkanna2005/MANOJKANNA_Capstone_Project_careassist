@@ -45,7 +45,10 @@ function ReviewClaim() {
               </div>
               <div className="col-md-6">
                 <p><strong>Invoice:</strong> {claim.invoiceNumber} ({money(claim.invoiceAmount)})</p>
-                <p><strong>Claim amount:</strong> {money(claim.claimAmount)}</p>
+                <p><strong>Requested amount:</strong> {money(claim.claimAmount)}</p>
+                <p><strong>Maximum approvable:</strong> {money(claim.maxApprovableAmount)}</p>
+                <p><strong>Approved amount:</strong> {money(claim.approvedAmount)}</p>
+                <p><strong>Insurance paid:</strong> {claim.insurancePaymentProcessed ? money(claim.insurancePaidAmount) : 'Not processed'}</p>
                 <p><strong>Coverage amount:</strong> {money(claim.coverageAmount)}</p>
                 <p><strong>Approved coverage used:</strong> {money(claim.approvedCoverageUsed)}</p>
                 <p><strong>Remaining coverage:</strong> {money(claim.remainingCoverage)}</p>

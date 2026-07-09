@@ -11,10 +11,10 @@ const menus = {
     ["Insurance Plans", "/patient/insurance-plans"],
     ["My Insurance", "/patient/my-insurance"],
     ["Request Invoice", "/patient/request-invoice"],
+    ["Pay Invoice", "/patient/pay-invoice"],
     ["My Invoices", "/patient/invoices"],
     ["Submit Claim", "/patient/submit-claim"],
     ["My Claims", "/patient/claims"],
-    ["Claim Status", "/patient/claim-status"],
   ],
   PROVIDER: [
     ["Dashboard", "/provider/dashboard"],
@@ -24,7 +24,6 @@ const menus = {
     ["Generate Invoice", "/provider/generate-invoice"],
     ["Provider Invoices", "/provider/invoices"],
     ["Notify Patient", "/provider/notify-patient"],
-    ["Submit Claim", "/provider/submit-claim"],
   ],
   INSURANCE: [
     ["Dashboard", "/insurance/dashboard"],

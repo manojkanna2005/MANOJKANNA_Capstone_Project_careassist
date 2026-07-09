@@ -30,13 +30,30 @@ function SelectInsurancePlan() {
     load();
   }, [planId]);
 
-  const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+
+    if (!plan?.active) {
+      setError('This insurance plan is inactive and cannot be selected.');
+      return;
+    }
+    if (!form.patientId || Number(form.patientId) <= 0 || !form.planId || Number(form.planId) <= 0) {
+      setError('A valid patient and insurance plan are required.');
+      return;
+    }
+    if (!form.enrollmentDate || !form.expiryDate || form.expiryDate <= form.enrollmentDate) {
+      setError('The insurance coverage dates are invalid.');
+      return;
+    }
+
     try {
-      await selectInsurancePlan(form);
+      await selectInsurancePlan({
+        ...form,
+        patientId: Number(form.patientId),
+        planId: Number(form.planId),
+        status: 'ACTIVE',
+      });
       setMessage('Insurance plan selected successfully.');
       setTimeout(() => navigate('/patient/my-insurance'), 1000);
     } catch (err) {
@@ -54,11 +71,11 @@ function SelectInsurancePlan() {
           <div className="row">
             <div className="col-md-4 mb-3"><label className="form-label">Patient ID</label><input className="form-control" name="patientId" value={form.patientId} readOnly /></div>
             <div className="col-md-4 mb-3"><label className="form-label">Plan ID</label><input className="form-control" name="planId" value={form.planId} readOnly /></div>
-            <div className="col-md-4 mb-3"><label className="form-label">Status</label><select className="form-select" name="status" value={form.status} onChange={handleChange}><option>ACTIVE</option><option>PENDING</option></select></div>
+            <div className="col-md-4 mb-3"><label className="form-label">Status</label><input className="form-control" name="status" value="ACTIVE" readOnly /></div>
           </div>
           <div className="row">
-            <div className="col-md-6 mb-3"><label className="form-label">Enrollment Date</label><input className="form-control" type="date" name="enrollmentDate" value={form.enrollmentDate} onChange={handleChange} required /></div>
-            <div className="col-md-6 mb-3"><label className="form-label">Expiry Date</label><input className="form-control" type="date" name="expiryDate" value={form.expiryDate} onChange={handleChange} required /></div>
+            <div className="col-md-6 mb-3"><label className="form-label">Enrollment Date</label><input className="form-control" type="date" name="enrollmentDate" value={form.enrollmentDate} readOnly required /></div>
+            <div className="col-md-6 mb-3"><label className="form-label">Expiry Date</label><input className="form-control" type="date" name="expiryDate" value={form.expiryDate} readOnly required /></div>
           </div>
           <button className="btn btn-primary" disabled={!form.patientId}>Confirm Selection</button>
         </form>

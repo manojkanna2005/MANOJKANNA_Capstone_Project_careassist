@@ -46,6 +46,7 @@ public class ClaimDocumentServiceImpl implements IClaimDocumentService {
             "image/jpeg",
             "image/png");
     private static final int MAX_FILES_PER_CLAIM = 5;
+    private static final long MAX_FILE_SIZE_BYTES = 5L * 1024L * 1024L;
 
     private final ClaimDocumentRepository documentRepository;
     private final ClaimRepository claimRepository;
@@ -187,6 +188,16 @@ public class ClaimDocumentServiceImpl implements IClaimDocumentService {
         String extension = getExtension(originalName);
         String contentType = file.getContentType() == null ? "" : file.getContentType().toLowerCase(Locale.ROOT);
 
+        if (originalName.isBlank() || originalName.length() > 255) {
+            throw new BusinessValidationException(
+                    "documents",
+                    "Document file name must be between 1 and 255 characters.");
+        }
+        if (file.getSize() <= 0 || file.getSize() > MAX_FILE_SIZE_BYTES) {
+            throw new BusinessValidationException(
+                    "documents",
+                    "Each medical document must be larger than 0 bytes and no more than 5 MB.");
+        }
         if (!ALLOWED_EXTENSIONS.contains(extension) || !ALLOWED_CONTENT_TYPES.contains(contentType)) {
             throw new BusinessValidationException(
                     "documents",
@@ -242,6 +253,11 @@ public class ClaimDocumentServiceImpl implements IClaimDocumentService {
         boolean allowed = patientOwner || providerOwner || (!writeAccess && insuranceOwner);
         if (!allowed) {
             throw new AccessDeniedException("You are not allowed to access this claim document.");
+        }
+        if (writeAccess && !"PENDING".equalsIgnoreCase(claim.getStatus())) {
+            throw new BusinessValidationException(
+                    "documents",
+                    "Medical documents cannot be added or removed after the claim decision.");
         }
     }
 

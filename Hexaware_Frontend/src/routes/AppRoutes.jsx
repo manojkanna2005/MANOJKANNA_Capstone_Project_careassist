@@ -5,6 +5,7 @@ import Login from "../components/auth/Login.jsx";
 import Register from "../components/auth/Register.jsx";
 import Logout from "../components/auth/Logout.jsx";
 import ForgotPassword from "../components/auth/ForgotPassword.jsx";
+import OAuthSuccess from "../components/auth/OAuthSuccess.jsx";
 import AccountSettings from "../components/common/AccountSettings.jsx";
 
 import PatientDashboard from "../components/patient/PatientDashboard.jsx";
@@ -25,7 +26,6 @@ import PatientRequests from "../components/provider/PatientRequests.jsx";
 import GenerateInvoice from "../components/provider/GenerateInvoice.jsx";
 import ProviderInvoices from "../components/provider/ProviderInvoices.jsx";
 import NotifyPatient from "../components/provider/NotifyPatient.jsx";
-import SubmitClaimForPatient from "../components/provider/SubmitClaimForPatient.jsx";
 
 import InsuranceDashboard from "../components/insurance/InsuranceDashboard.jsx";
 import InsuranceCompanyProfile from "../components/insurance/InsuranceCompanyProfile.jsx";
@@ -57,6 +57,7 @@ function AppRoutes() {
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/oauth-success" element={<OAuthSuccess />} />
       <Route path="/logout" element={<Logout />} />
       <Route path="/unauthorized" element={<Unauthorized />} />
       <Route path="/account/settings" element={protect(["PATIENT", "PROVIDER", "INSURANCE", "ADMIN"], <AccountSettings />)} />
@@ -88,6 +89,10 @@ function AppRoutes() {
       <Route
         path="/patient/invoices"
         element={protect(["PATIENT"], <MyInvoices />)}
+      />
+      <Route
+        path="/patient/pay-invoice"
+        element={protect(["PATIENT"], <PayInvoice />)}
       />
       <Route
         path="/patient/pay-invoice/:invoiceId"
@@ -129,10 +134,6 @@ function AppRoutes() {
       <Route
         path="/provider/notify-patient"
         element={protect(["PROVIDER"], <NotifyPatient />)}
-      />
-      <Route
-        path="/provider/submit-claim"
-        element={protect(["PROVIDER"], <SubmitClaimForPatient />)}
       />
 
       <Route

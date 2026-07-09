@@ -8,5 +8,4 @@ public interface IClaimPaymentService {
     ClaimPaymentDTO getPaymentById(Integer paymentId);
     ClaimPaymentDTO getPaymentByClaimId(Integer claimId);
     List<ClaimPaymentDTO> getAllPayments();
-    void deletePayment(Integer paymentId);
 }

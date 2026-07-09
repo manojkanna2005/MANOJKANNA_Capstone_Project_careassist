@@ -3,6 +3,7 @@ package com.hexaware.main.careassist.service.impl;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.math.BigDecimal;
@@ -20,6 +21,7 @@ import com.hexaware.main.careassist.dto.HealthcareProviderDTO;
 import com.hexaware.main.careassist.dto.InvoiceDTO;
 import com.hexaware.main.careassist.dto.PatientDTO;
 import com.hexaware.main.careassist.dto.UserDTO;
+import com.hexaware.main.careassist.exception.BusinessValidationException;
 import com.hexaware.main.careassist.service.IHealthcareProviderService;
 import com.hexaware.main.careassist.service.IInvoiceService;
 import com.hexaware.main.careassist.service.IPatientService;
@@ -67,15 +69,15 @@ class InvoiceServiceImplTest {
     }
 
     @Test
-    void markInvoiceAsPaidTest() {
+    void manualPaidStatusIsRejectedTest() {
         PatientDTO patient = createPatient();
         HealthcareProviderDTO provider = createProvider();
-        InvoiceDTO savedInvoice = invoiceService.generateInvoice(invoiceDTO(patient.getPatientId(), provider.getProviderId()));
+        InvoiceDTO savedInvoice = invoiceService.generateInvoice(
+                invoiceDTO(patient.getPatientId(), provider.getProviderId()));
 
-        InvoiceDTO paidInvoice = invoiceService.markInvoiceAsPaid(savedInvoice.getInvoiceId());
-
-        assertNotNull(paidInvoice);
-        assertEquals("PAID", paidInvoice.getStatus());
+        assertThrows(
+                BusinessValidationException.class,
+                () -> invoiceService.updateInvoiceStatus(savedInvoice.getInvoiceId(), "PAID"));
     }
 
     private PatientDTO createPatient() {

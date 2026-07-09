@@ -32,47 +32,55 @@ function AdminDashboard() {
       subtitle="System dashboard for claims and payments."
     >
       <Message type="danger">{error}</Message>
-      <div className="row g-3 mb-4">
-        {Object.entries(summary || {}).map(([k, v]) => (
-          <div className="col-md-3" key={k}>
-            <div className="card page-card p-3">
-              <small className="text-muted">{k}</small>
-              <h4>{String(v)}</h4>
+      <div className="admin-dashboard">
+        <div className="role-hero">
+          <h2>Operations overview</h2>
+          <p>
+            Monitor the health of claims, payments, and compliance in one panel.
+          </p>
+        </div>
+        <div className="row g-3 mb-4">
+          {Object.entries(summary || {}).map(([k, v]) => (
+            <div className="col-md-3" key={k}>
+              <div className="card page-card role-card p-3">
+                <small className="text-muted">{k}</small>
+                <h4>{String(v)}</h4>
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
-      <div className="card page-card p-4 mb-4">
-        <h5>Recent Claims</h5>
-        <Table
-          data={claims.slice(0, 5)}
-          columns={[
-            { key: "claimId", label: "Claim" },
-            { key: "patientId", label: "Patient" },
-            {
-              key: "claimAmount",
-              label: "Amount",
-              render: (r) => money(r.claimAmount),
-            },
-            { key: "status", label: "Status" },
-          ]}
-        />
-      </div>
-      <div className="card page-card p-4">
-        <h5>Recent Payments</h5>
-        <Table
-          data={payments.slice(0, 5)}
-          columns={[
-            { key: "paymentId", label: "Payment" },
-            { key: "claimId", label: "Claim" },
-            {
-              key: "paymentAmount",
-              label: "Amount",
-              render: (r) => money(r.paymentAmount),
-            },
-            { key: "paymentMode", label: "Mode" },
-          ]}
-        />
+          ))}
+        </div>
+        <div className="card page-card role-card p-4 mb-4">
+          <h5>Recent Claims</h5>
+          <Table
+            data={claims.slice(0, 5)}
+            columns={[
+              { key: "claimId", label: "Claim" },
+              { key: "patientId", label: "Patient" },
+              {
+                key: "claimAmount",
+                label: "Amount",
+                render: (r) => money(r.claimAmount),
+              },
+              { key: "status", label: "Status" },
+            ]}
+          />
+        </div>
+        <div className="card page-card role-card p-4">
+          <h5>Recent Payments</h5>
+          <Table
+            data={payments.slice(0, 5)}
+            columns={[
+              { key: "paymentId", label: "Payment" },
+              { key: "claimId", label: "Claim" },
+              {
+                key: "paymentAmount",
+                label: "Amount",
+                render: (r) => money(r.paymentAmount),
+              },
+              { key: "paymentMode", label: "Mode" },
+            ]}
+          />
+        </div>
       </div>
     </Layout>
   );

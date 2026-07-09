@@ -1,0 +1,34 @@
+.insurance-dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.insurance-dashboard .role-hero {
+  background: linear-gradient(135deg, #f0fff4, #ffffff);
+  border: 1px solid #c7f0d0;
+  border-radius: 18px;
+  padding: 1.2rem 1.4rem;
+  box-shadow: 0 8px 24px rgba(22, 163, 74, 0.08);
+}
+
+.insurance-dashboard .role-hero h2 {
+  color: #15803d;
+  margin-bottom: 0.3rem;
+}
+
+.insurance-dashboard .role-card {
+  border: 0;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #ffffff 0%, #f7fdf9 100%);
+  box-shadow: 0 8px 24px rgba(34, 197, 94, 0.12);
+}
+
+.insurance-dashboard .role-card h5 {
+  color: #166534;
+}
+
+.insurance-dashboard .btn-primary,
+.insurance-dashboard .btn-outline-primary {
+  border-radius: 999px;
+}

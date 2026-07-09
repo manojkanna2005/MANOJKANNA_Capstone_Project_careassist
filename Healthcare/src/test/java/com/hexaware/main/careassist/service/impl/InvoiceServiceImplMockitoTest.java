@@ -19,7 +19,10 @@ import com.hexaware.main.careassist.dto.InvoiceDTO;
 import com.hexaware.main.careassist.entity.HealthcareProvider;
 import com.hexaware.main.careassist.entity.Invoice;
 import com.hexaware.main.careassist.entity.Patient;
+import com.hexaware.main.careassist.repository.ClaimRepository;
+import com.hexaware.main.careassist.repository.ClaimPaymentRepository;
 import com.hexaware.main.careassist.repository.HealthcareProviderRepository;
+import com.hexaware.main.careassist.repository.InvoicePaymentRepository;
 import com.hexaware.main.careassist.repository.InvoiceRepository;
 import com.hexaware.main.careassist.repository.PatientRepository;
 
@@ -34,6 +37,15 @@ class InvoiceServiceImplMockitoTest {
 
     @Mock
     private PatientRepository patientRepository;
+
+    @Mock
+    private ClaimRepository claimRepository;
+
+    @Mock
+    private ClaimPaymentRepository claimPaymentRepository;
+
+    @Mock
+    private InvoicePaymentRepository invoicePaymentRepository;
 
     @InjectMocks
     private InvoiceServiceImpl invoiceService;

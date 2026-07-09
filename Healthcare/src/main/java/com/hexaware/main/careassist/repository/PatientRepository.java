@@ -8,4 +8,5 @@ import com.hexaware.main.careassist.entity.Patient;
 
 public interface PatientRepository extends JpaRepository<Patient, Integer> {
     Optional<Patient> findTopByAppUserUserIdOrderByPatientIdDesc(Integer userId);
+    Optional<Patient> findTopByAppUserEmailIgnoreCaseOrderByPatientIdDesc(String email);
 }

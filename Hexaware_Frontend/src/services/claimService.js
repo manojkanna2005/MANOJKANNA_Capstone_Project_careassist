@@ -56,15 +56,19 @@ export const getClaimsByPatientId = (patientId) =>
   api.get(`/api/v1/claims/patient/${patientId}`).then((response) => response.data);
 export const getClaimsByInsuranceCompanyId = (companyId) =>
   api.get(`/api/v1/claims/company/${companyId}`).then((response) => response.data);
+export const getActionableClaimsByInsuranceCompanyId = (companyId) =>
+  api
+    .get(`/api/v1/claims/company/${companyId}/actionable`)
+    .then((response) => response.data);
 export const getAllClaims = () =>
   api.get('/api/v1/claims/all').then((response) => response.data);
-export const approveClaim = (claimId) =>
-  api.patch(`/api/v1/claims/approve/${claimId}`).then((response) => response.data);
+export const approveClaim = (claimId, approvedAmount) =>
+  api
+    .patch(`/api/v1/claims/approve/${claimId}`, { approvedAmount })
+    .then((response) => response.data);
 export const rejectClaim = (claimId, rejectionReason) =>
   api
-    .patch(`/api/v1/claims/reject/${claimId}`, null, {
-      params: { rejectionReason },
-    })
+    .patch(`/api/v1/claims/reject/${claimId}`, { rejectionReason })
     .then((response) => response.data);
 export const deleteClaim = (claimId) =>
   api.delete(`/api/v1/claims/delete/${claimId}`).then((response) => response.data);

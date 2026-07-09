@@ -1,9 +1,10 @@
 package com.hexaware.main.careassist.security;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.List;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -27,17 +28,31 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 @EnableMethodSecurity
 public class SecurityConfig {
 
-    @Autowired
-    private JwtFilter jwtFilter;
+    private final JwtFilter jwtFilter;
+    private final JwtAuthenticationEntryPoint authenticationEntryPoint;
+    private final JwtAccessDeniedHandler accessDeniedHandler;
+    private final CustomOAuth2UserService customOAuth2UserService;
+    private final OAuth2SuccessHandler oAuth2SuccessHandler;
+    private final String allowedOrigins;
+    private final String frontendUrl;
 
-    @Autowired
-    private JwtAuthenticationEntryPoint authenticationEntryPoint;
+    public SecurityConfig(
+            JwtFilter jwtFilter,
+            JwtAuthenticationEntryPoint authenticationEntryPoint,
+            JwtAccessDeniedHandler accessDeniedHandler,
+            CustomOAuth2UserService customOAuth2UserService,
+            OAuth2SuccessHandler oAuth2SuccessHandler,
+            @Value("${app.cors.allowed-origins}") String allowedOrigins,
+            @Value("${app.frontend-url}") String frontendUrl) {
 
-    @Autowired
-    private JwtAccessDeniedHandler accessDeniedHandler;
-
-    @Value("${app.cors.allowed-origins}")
-    private String allowedOrigins;
+        this.jwtFilter = jwtFilter;
+        this.authenticationEntryPoint = authenticationEntryPoint;
+        this.accessDeniedHandler = accessDeniedHandler;
+        this.customOAuth2UserService = customOAuth2UserService;
+        this.oAuth2SuccessHandler = oAuth2SuccessHandler;
+        this.allowedOrigins = allowedOrigins;
+        this.frontendUrl = removeTrailingSlash(frontendUrl);
+    }
 
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -45,7 +60,7 @@ public class SecurityConfig {
         http.cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session ->
-                        session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+                        session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED)
                 )
                 .exceptionHandling(exception -> exception
                         .authenticationEntryPoint(authenticationEntryPoint)
@@ -57,6 +72,8 @@ public class SecurityConfig {
 
                         .requestMatchers(
                                 "/api/v1/auth/**",
+                                "/oauth2/**",
+                                "/login/oauth2/**",
                                 "/swagger-ui/**",
                                 "/swagger-ui.html",
                                 "/v3/api-docs/**",
@@ -195,6 +212,12 @@ public class SecurityConfig {
                                 "ADMIN"
                         )
 
+                        .requestMatchers("/api/v1/invoice-payments/**")
+                        .hasAnyRole(
+                                "PATIENT",
+                                "ADMIN"
+                        )
+
                         .requestMatchers("/api/v1/email-notifications/**")
                         .hasAnyRole(
                                 "PATIENT",
@@ -204,6 +227,24 @@ public class SecurityConfig {
                         )
 
                         .anyRequest().authenticated()
+                )
+                .oauth2Login(oauth -> oauth
+                        .userInfoEndpoint(userInfo -> userInfo
+                                .userService(customOAuth2UserService)
+                        )
+                        .successHandler(oAuth2SuccessHandler)
+                        .failureHandler((request, response, exception) -> {
+                            String error = URLEncoder.encode(
+                                    exception.getMessage() == null
+                                            ? "GitHub login failed"
+                                            : exception.getMessage(),
+                                    StandardCharsets.UTF_8
+                            );
+
+                            response.sendRedirect(
+                                    frontendUrl + "/login?oauthError=" + error
+                            );
+                        })
                 );
 
         http.addFilterBefore(
@@ -225,7 +266,6 @@ public class SecurityConfig {
                 .toList();
 
         configuration.setAllowedOrigins(origins);
-
         configuration.setAllowedMethods(
                 List.of(
                         "GET",
@@ -236,21 +276,17 @@ public class SecurityConfig {
                         "OPTIONS"
                 )
         );
-
         configuration.setAllowedHeaders(List.of("*"));
-
         configuration.setExposedHeaders(
                 List.of(
                         "Authorization",
                         "Content-Disposition"
                 )
         );
-
         configuration.setAllowCredentials(false);
 
         UrlBasedCorsConfigurationSource source =
                 new UrlBasedCorsConfigurationSource();
-
         source.registerCorsConfiguration("/**", configuration);
 
         return source;
@@ -265,7 +301,16 @@ public class SecurityConfig {
     AuthenticationManager authenticationManager(
             AuthenticationConfiguration configuration
     ) throws Exception {
-
         return configuration.getAuthenticationManager();
+    }
+
+    private static String removeTrailingSlash(String value) {
+        if (value == null || value.isBlank()) {
+            return "http://localhost:5173";
+        }
+
+        return value.endsWith("/")
+                ? value.substring(0, value.length() - 1)
+                : value;
     }
 }

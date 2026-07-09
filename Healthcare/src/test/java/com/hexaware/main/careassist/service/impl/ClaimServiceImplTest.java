@@ -193,8 +193,9 @@ class ClaimServiceImplTest {
         PatientInsuranceDTO dto = new PatientInsuranceDTO();
         dto.setPatientId(patientId);
         dto.setPlanId(planId);
-        dto.setEnrollmentDate(LocalDate.now().minusDays(1));
-        dto.setExpiryDate(LocalDate.now().plusYears(1));
+        LocalDate enrollmentDate = LocalDate.now().minusDays(1);
+        dto.setEnrollmentDate(enrollmentDate);
+        dto.setExpiryDate(enrollmentDate.plusMonths(12));
         dto.setStatus("ACTIVE");
         return dto;
     }

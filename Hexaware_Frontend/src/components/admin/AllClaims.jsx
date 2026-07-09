@@ -19,10 +19,21 @@ function AllClaims() {
     load();
   }, []);
 
-  const approve = async (id) => {
+  const approve = async (claim) => {
+    const maximum = Number(claim.maxApprovableAmount || 0);
+    const input = window.prompt(
+      `Approved amount (maximum ${money(maximum)})`,
+      String(maximum),
+    );
+    if (input === null) return;
+    const amount = Number(input);
+    if (!Number.isFinite(amount) || amount <= 0 || amount > maximum) {
+      setError(`Approved amount must be between ₹0.01 and ${money(maximum)}.`);
+      return;
+    }
     try {
-      await approveClaim(id);
-      setMessage('Claim approved.');
+      await approveClaim(claim.claimId, amount);
+      setMessage(`Claim approved for ${money(amount)}.`);
       load();
     } catch (approveError) {
       setError(approveError.userMessage || 'Unable to approve claim.');
@@ -65,7 +76,9 @@ function AllClaims() {
             { key: 'companyName', label: 'Company' },
             { key: 'invoiceNumber', label: 'Invoice' },
             { key: 'invoiceAmount', label: 'Invoice Amount', render: (row) => money(row.invoiceAmount) },
-            { key: 'claimAmount', label: 'Claim Amount', render: (row) => money(row.claimAmount) },
+            { key: 'claimAmount', label: 'Requested', render: (row) => money(row.claimAmount) },
+            { key: 'approvedAmount', label: 'Approved', render: (row) => money(row.approvedAmount) },
+            { key: 'remainingCoverage', label: 'Coverage Remaining', render: (row) => money(row.remainingCoverage) },
             { key: 'submissionDate', label: 'Submitted' },
             { key: 'approvalDate', label: 'Approved' },
             { key: 'status', label: 'Status' },
@@ -74,7 +87,7 @@ function AllClaims() {
             <div className="d-flex gap-2 flex-wrap">
               {row.status === 'PENDING' && (
                 <>
-                  <button className="btn btn-sm btn-success" onClick={() => approve(row.claimId)}>Approve</button>
+                  <button className="btn btn-sm btn-success" onClick={() => approve(row)}>Approve</button>
                   <button className="btn btn-sm btn-warning" onClick={() => reject(row.claimId)}>Reject</button>
                 </>
               )}

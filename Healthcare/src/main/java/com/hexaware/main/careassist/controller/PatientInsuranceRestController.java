@@ -3,6 +3,7 @@ package com.hexaware.main.careassist.controller;
 import java.util.List;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -17,7 +18,9 @@ import com.hexaware.main.careassist.dto.PatientInsuranceDTO;
 import com.hexaware.main.careassist.service.IPatientInsuranceService;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Positive;
 @RestController
+@Validated
 @RequestMapping("/api/v1/patient-insurance")
 public class PatientInsuranceRestController {
 
@@ -30,33 +33,38 @@ public class PatientInsuranceRestController {
     }
 
     @PutMapping("/update/{enrollmentId}")
-    public PatientInsuranceDTO updatePatientInsurance(@PathVariable Integer enrollmentId,
+    public PatientInsuranceDTO updatePatientInsurance(@PathVariable @Positive Integer enrollmentId,
                                                       @Valid @RequestBody PatientInsuranceDTO dto) {
         return patientInsuranceService.updatePatientInsurance(enrollmentId, dto);
     }
 
     @GetMapping("/{enrollmentId}")
-    public PatientInsuranceDTO getPatientInsuranceById(@PathVariable Integer enrollmentId) {
+    public PatientInsuranceDTO getPatientInsuranceById(@PathVariable @Positive Integer enrollmentId) {
         return patientInsuranceService.getPatientInsuranceById(enrollmentId);
     }
 
     @GetMapping("/patient/{patientId}/active")
-    public PatientInsuranceDTO getActiveInsuranceByPatientId(@PathVariable Integer patientId) {
+    public PatientInsuranceDTO getActiveInsuranceByPatientId(@PathVariable @Positive Integer patientId) {
         return patientInsuranceService.getActiveInsuranceByPatientId(patientId);
     }
 
+    @GetMapping("/patient/{patientId}/active-all")
+    public List<PatientInsuranceDTO> getActiveInsurancesByPatientId(@PathVariable @Positive Integer patientId) {
+        return patientInsuranceService.getActiveInsurancesByPatientId(patientId);
+    }
+
     @GetMapping("/patient/{patientId}/history")
-    public List<PatientInsuranceDTO> getInsuranceHistoryByPatientId(@PathVariable Integer patientId) {
+    public List<PatientInsuranceDTO> getInsuranceHistoryByPatientId(@PathVariable @Positive Integer patientId) {
         return patientInsuranceService.getInsuranceHistoryByPatientId(patientId);
     }
 
     @PatchMapping("/cancel/{enrollmentId}")
-    public PatientInsuranceDTO cancelInsurancePlan(@PathVariable Integer enrollmentId) {
+    public PatientInsuranceDTO cancelInsurancePlan(@PathVariable @Positive Integer enrollmentId) {
         return patientInsuranceService.cancelInsurancePlan(enrollmentId);
     }
 
     @DeleteMapping("/delete/{enrollmentId}")
-    public String deletePatientInsurance(@PathVariable Integer enrollmentId) {
+    public String deletePatientInsurance(@PathVariable @Positive Integer enrollmentId) {
         patientInsuranceService.deletePatientInsurance(enrollmentId);
         return "Patient insurance deleted successfully";
     }

@@ -7,9 +7,27 @@ export function nowDateTime() {
 }
 
 export function addMonths(dateString, months) {
-  const date = dateString ? new Date(dateString) : new Date();
-  date.setMonth(date.getMonth() + Number(months || 1));
-  return date.toISOString().slice(0, 10);
+  const source = dateString || today();
+  const [year, month, day] = source.split('-').map(Number);
+  const monthOffset = Number(months || 1);
+
+  if (![year, month, day, monthOffset].every(Number.isFinite)) {
+    return '';
+  }
+
+  const targetMonthIndex = month - 1 + monthOffset;
+  const targetYear = year + Math.floor(targetMonthIndex / 12);
+  const normalizedMonthIndex = ((targetMonthIndex % 12) + 12) % 12;
+  const lastDayOfTargetMonth = new Date(
+    Date.UTC(targetYear, normalizedMonthIndex + 1, 0),
+  ).getUTCDate();
+  const targetDay = Math.min(day, lastDayOfTargetMonth);
+
+  return new Date(
+    Date.UTC(targetYear, normalizedMonthIndex, targetDay),
+  )
+    .toISOString()
+    .slice(0, 10);
 }
 
 export function money(value) {

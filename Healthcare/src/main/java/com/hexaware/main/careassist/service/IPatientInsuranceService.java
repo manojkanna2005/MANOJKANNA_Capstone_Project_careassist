@@ -8,6 +8,7 @@ public interface IPatientInsuranceService {
     PatientInsuranceDTO updatePatientInsurance(Integer enrollmentId, PatientInsuranceDTO dto);
     PatientInsuranceDTO getPatientInsuranceById(Integer enrollmentId);
     PatientInsuranceDTO getActiveInsuranceByPatientId(Integer patientId);
+    List<PatientInsuranceDTO> getActiveInsurancesByPatientId(Integer patientId);
     List<PatientInsuranceDTO> getInsuranceHistoryByPatientId(Integer patientId);
     PatientInsuranceDTO cancelInsurancePlan(Integer enrollmentId);
     void deletePatientInsurance(Integer enrollmentId);

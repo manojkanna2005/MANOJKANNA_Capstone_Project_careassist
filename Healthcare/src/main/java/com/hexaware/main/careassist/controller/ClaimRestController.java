@@ -15,20 +15,24 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.hexaware.main.careassist.dto.ClaimApprovalRequest;
 import com.hexaware.main.careassist.dto.ClaimDTO;
 import com.hexaware.main.careassist.dto.ClaimDocumentDTO;
+import com.hexaware.main.careassist.dto.ClaimRejectionRequest;
 import com.hexaware.main.careassist.service.IClaimDocumentService;
 import com.hexaware.main.careassist.service.IClaimService;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Positive;
 import lombok.RequiredArgsConstructor;
 
 @RestController
+@Validated
 @RequestMapping("/api/v1/claims")
 @RequiredArgsConstructor
 public class ClaimRestController {
@@ -50,18 +54,18 @@ public class ClaimRestController {
 
     @PostMapping(value = "/{claimId}/documents", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public List<ClaimDocumentDTO> uploadDocuments(
-            @PathVariable Integer claimId,
+            @PathVariable @Positive Integer claimId,
             @RequestPart("documents") List<MultipartFile> documents) {
         return claimDocumentService.storeDocuments(claimId, documents);
     }
 
     @GetMapping("/{claimId}/documents")
-    public List<ClaimDocumentDTO> getClaimDocuments(@PathVariable Integer claimId) {
+    public List<ClaimDocumentDTO> getClaimDocuments(@PathVariable @Positive Integer claimId) {
         return claimDocumentService.getDocuments(claimId);
     }
 
     @GetMapping("/documents/{documentId}/download")
-    public ResponseEntity<Resource> downloadDocument(@PathVariable Integer documentId) {
+    public ResponseEntity<Resource> downloadDocument(@PathVariable @Positive Integer documentId) {
         ClaimDocumentDTO document = claimDocumentService.getDocument(documentId);
         Resource resource = claimDocumentService.loadDocument(documentId);
         String contentType = document.getContentType() == null
@@ -79,24 +83,31 @@ public class ClaimRestController {
     }
 
     @DeleteMapping("/documents/{documentId}")
-    public String deleteDocument(@PathVariable Integer documentId) {
+    public String deleteDocument(@PathVariable @Positive Integer documentId) {
         claimDocumentService.deleteDocument(documentId);
         return "Medical document deleted successfully";
     }
 
     @GetMapping("/{claimId}")
-    public ClaimDTO getClaimById(@PathVariable Integer claimId) {
+    public ClaimDTO getClaimById(@PathVariable @Positive Integer claimId) {
         return claimService.getClaimById(claimId);
     }
 
     @GetMapping("/patient/{patientId}")
-    public List<ClaimDTO> getClaimsByPatientId(@PathVariable Integer patientId) {
+    public List<ClaimDTO> getClaimsByPatientId(@PathVariable @Positive Integer patientId) {
         return claimService.getClaimsByPatientId(patientId);
     }
 
     @GetMapping("/company/{companyId}")
-    public List<ClaimDTO> getClaimsByInsuranceCompanyId(@PathVariable Integer companyId) {
+    public List<ClaimDTO> getClaimsByInsuranceCompanyId(@PathVariable @Positive Integer companyId) {
         return claimService.getClaimsByInsuranceCompanyId(companyId);
+    }
+
+
+    @GetMapping("/company/{companyId}/actionable")
+    public List<ClaimDTO> getActionableClaimsByInsuranceCompanyId(
+            @PathVariable @Positive Integer companyId) {
+        return claimService.getActionableClaimsByInsuranceCompanyId(companyId);
     }
 
     @GetMapping("/all")
@@ -105,19 +116,21 @@ public class ClaimRestController {
     }
 
     @PatchMapping("/approve/{claimId}")
-    public ClaimDTO approveClaim(@PathVariable Integer claimId) {
-        return claimService.approveClaim(claimId);
+    public ClaimDTO approveClaim(
+            @PathVariable @Positive Integer claimId,
+            @Valid @RequestBody ClaimApprovalRequest request) {
+        return claimService.approveClaim(claimId, request.getApprovedAmount());
     }
 
     @PatchMapping("/reject/{claimId}")
     public ClaimDTO rejectClaim(
-            @PathVariable Integer claimId,
-            @RequestParam String rejectionReason) {
-        return claimService.rejectClaim(claimId, rejectionReason);
+            @PathVariable @Positive Integer claimId,
+            @Valid @RequestBody ClaimRejectionRequest request) {
+        return claimService.rejectClaim(claimId, request.getRejectionReason());
     }
 
     @DeleteMapping("/delete/{claimId}")
-    public String deleteClaim(@PathVariable Integer claimId) {
+    public String deleteClaim(@PathVariable @Positive Integer claimId) {
         claimService.deleteClaim(claimId);
         return "Claim deleted successfully";
     }

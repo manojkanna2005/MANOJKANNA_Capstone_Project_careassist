@@ -7,6 +7,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PastOrPresent;
 import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Positive;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -21,9 +22,11 @@ public class PatientInsuranceDTO {
     private int enrollmentId;
 
     @NotNull(message = "Patient ID is required")
+    @Positive(message = "Patient ID must be greater than 0")
     private Integer patientId;
 
     @NotNull(message = "Insurance Plan ID is required")
+    @Positive(message = "Insurance plan ID must be greater than 0")
     private Integer planId;
 
     @NotNull(message = "Enrollment date is required")
@@ -39,10 +42,11 @@ public class PatientInsuranceDTO {
             message = "Status must be ACTIVE, EXPIRED, CANCELLED, or PENDING")
     private String status;
 
-    // Read-only plan/company details used by claim forms and coverage feedback.
     private Integer companyId;
     private String companyName;
     private String planName;
     private BigDecimal coverageAmount;
+    private BigDecimal approvedCoverageUsed;
+    private BigDecimal remainingCoverage;
     private Boolean planActive;
 }

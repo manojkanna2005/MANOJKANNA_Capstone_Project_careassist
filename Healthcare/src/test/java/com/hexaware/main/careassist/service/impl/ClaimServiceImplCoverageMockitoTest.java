@@ -29,8 +29,10 @@ import com.hexaware.main.careassist.entity.Patient;
 import com.hexaware.main.careassist.entity.PatientInsurance;
 import com.hexaware.main.careassist.exception.BusinessValidationException;
 import com.hexaware.main.careassist.repository.ClaimDocumentRepository;
+import com.hexaware.main.careassist.repository.ClaimPaymentRepository;
 import com.hexaware.main.careassist.repository.ClaimRepository;
 import com.hexaware.main.careassist.repository.InsuranceCompanyRepository;
+import com.hexaware.main.careassist.repository.InvoicePaymentRepository;
 import com.hexaware.main.careassist.repository.InvoiceRepository;
 import com.hexaware.main.careassist.repository.PatientInsuranceRepository;
 import com.hexaware.main.careassist.repository.PatientRepository;
@@ -47,10 +49,16 @@ class ClaimServiceImplCoverageMockitoTest {
     private ClaimDocumentRepository claimDocumentRepository;
 
     @Mock
+    private ClaimPaymentRepository claimPaymentRepository;
+
+    @Mock
     private PatientRepository patientRepository;
 
     @Mock
     private InvoiceRepository invoiceRepository;
+
+    @Mock
+    private InvoicePaymentRepository invoicePaymentRepository;
 
     @Mock
     private InsuranceCompanyRepository companyRepository;

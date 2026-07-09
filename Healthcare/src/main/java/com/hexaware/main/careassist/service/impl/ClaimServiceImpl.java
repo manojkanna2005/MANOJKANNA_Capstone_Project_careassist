@@ -16,6 +16,7 @@ import org.springframework.web.multipart.MultipartFile;
 import com.hexaware.main.careassist.dto.ClaimDTO;
 import com.hexaware.main.careassist.dto.ClaimDocumentDTO;
 import com.hexaware.main.careassist.entity.Claim;
+//import com.hexaware.main.careassist.entity.ClaimPayment;
 import com.hexaware.main.careassist.entity.InsuranceCompany;
 import com.hexaware.main.careassist.entity.Invoice;
 import com.hexaware.main.careassist.entity.Patient;
@@ -24,7 +25,9 @@ import com.hexaware.main.careassist.exception.BusinessValidationException;
 import com.hexaware.main.careassist.exception.ResourceNotFoundException;
 import com.hexaware.main.careassist.repository.ClaimDocumentRepository;
 import com.hexaware.main.careassist.repository.ClaimRepository;
+import com.hexaware.main.careassist.repository.ClaimPaymentRepository;
 import com.hexaware.main.careassist.repository.InsuranceCompanyRepository;
+import com.hexaware.main.careassist.repository.InvoicePaymentRepository;
 import com.hexaware.main.careassist.repository.InvoiceRepository;
 import com.hexaware.main.careassist.repository.PatientInsuranceRepository;
 import com.hexaware.main.careassist.repository.PatientRepository;
@@ -42,11 +45,15 @@ import lombok.extern.slf4j.Slf4j;
 public class ClaimServiceImpl implements IClaimService {
 
     private static final Set<String> ACTIVE_CLAIM_STATUSES = Set.of("PENDING", "APPROVED");
+    private static final Set<String> CLAIMABLE_INVOICE_STATUSES = Set.of("PENDING", "UNPAID", "OVERDUE");
+    private static final BigDecimal MAX_MONEY_AMOUNT = new BigDecimal("9999999999.99");
 
     private final ClaimRepository claimRepository;
+    private final ClaimPaymentRepository claimPaymentRepository;
     private final ClaimDocumentRepository claimDocumentRepository;
     private final PatientRepository patientRepository;
     private final InvoiceRepository invoiceRepository;
+    private final InvoicePaymentRepository invoicePaymentRepository;
     private final InsuranceCompanyRepository companyRepository;
     private final PatientInsuranceRepository patientInsuranceRepository;
     private final IClaimDocumentService claimDocumentService;
@@ -89,6 +96,7 @@ public class ClaimServiceImpl implements IClaimService {
         claim.setTreatment(dto.getTreatment().trim());
         claim.setDateOfService(dto.getDateOfService());
         claim.setClaimAmount(dto.getClaimAmount());
+        claim.setApprovedAmount(null);
         claim.setSubmissionDate(LocalDateTime.now());
         claim.setApprovalDate(null);
         claim.setStatus("PENDING");
@@ -133,6 +141,16 @@ public class ClaimServiceImpl implements IClaimService {
 
     @Override
     @Transactional(readOnly = true)
+    public List<ClaimDTO> getActionableClaimsByInsuranceCompanyId(Integer companyId) {
+        InsuranceCompany company = getCompany(companyId);
+        validateInsuranceCompanyAccess(company);
+        return claimRepository.findActionableClaimsByCompanyId(companyId).stream()
+                .map(this::claimToDTO)
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public List<ClaimDTO> getAllClaims() {
         Authentication authentication = currentAuthentication();
         if (authentication != null && authentication.getAuthorities().stream()
@@ -147,13 +165,22 @@ public class ClaimServiceImpl implements IClaimService {
     @Override
     public ClaimDTO approveClaim(Integer claimId) {
         Claim claim = getClaimEntity(claimId);
+        return approveClaim(claimId, claim.getClaimAmount());
+    }
+
+    @Override
+    public ClaimDTO approveClaim(Integer claimId, BigDecimal approvedAmount) {
+        Claim claim = getClaimEntity(claimId);
         if (!"PENDING".equalsIgnoreCase(claim.getStatus())) {
             throw new BusinessValidationException("status", "Only pending claims can be approved.");
         }
 
         validateInsuranceDecisionOwner(claim);
-        validateRemainingCoverageForApproval(claim);
+        validateInvoiceCanReceiveInsurancePayment(claim.getInvoice());
+        validateApprovedAmount(claim, approvedAmount);
+        lockPolicyAndValidateRemainingCoverage(claim, approvedAmount);
 
+        claim.setApprovedAmount(approvedAmount);
         claim.setStatus("APPROVED");
         claim.setApprovalDate(LocalDateTime.now());
         claim.setRejectionReason(null);
@@ -162,8 +189,10 @@ public class ClaimServiceImpl implements IClaimService {
         sendClaimStatusEmail(
                 savedClaim,
                 "approved",
-                "Your claim has been approved by the insurance company.");
-        log.info("Claim approved claimId={} amount={}", claimId, claim.getClaimAmount());
+                "Your claim has been approved for " + approvedAmount
+                        + ". The insurance company must process this amount before you pay the remaining invoice balance.");
+        log.info("Claim approved claimId={} requestedAmount={} approvedAmount={}",
+                claimId, claim.getClaimAmount(), approvedAmount);
         return claimToDTO(savedClaim);
     }
 
@@ -172,10 +201,11 @@ public class ClaimServiceImpl implements IClaimService {
         if (rejectionReason == null || rejectionReason.isBlank()) {
             throw new BusinessValidationException("rejectionReason", "Rejection reason is required.");
         }
-        if (rejectionReason.trim().length() > 255) {
+        String normalizedReason = rejectionReason.trim();
+        if (normalizedReason.length() < 5 || normalizedReason.length() > 255) {
             throw new BusinessValidationException(
                     "rejectionReason",
-                    "Rejection reason cannot exceed 255 characters.");
+                    "Rejection reason must be between 5 and 255 characters.");
         }
 
         Claim claim = getClaimEntity(claimId);
@@ -185,8 +215,9 @@ public class ClaimServiceImpl implements IClaimService {
 
         validateInsuranceDecisionOwner(claim);
         claim.setStatus("REJECTED");
+        claim.setApprovedAmount(null);
         claim.setApprovalDate(null);
-        claim.setRejectionReason(rejectionReason.trim());
+        claim.setRejectionReason(normalizedReason);
         Claim savedClaim = claimRepository.save(claim);
 
         sendClaimStatusEmail(
@@ -201,6 +232,12 @@ public class ClaimServiceImpl implements IClaimService {
     public void deleteClaim(Integer claimId) {
         Claim claim = getClaimEntity(claimId);
         validateSubmitterOwnership(claim.getPatient(), claim.getInvoice());
+        if ("APPROVED".equalsIgnoreCase(claim.getStatus())
+                || claimPaymentRepository.existsByClaimClaimId(claimId)) {
+            throw new BusinessValidationException(
+                    "claimId",
+                    "An approved or paid claim is part of the financial record and cannot be deleted.");
+        }
         List<ClaimDocumentDTO> documents = claimDocumentService.getDocuments(claimId);
         documents.forEach(document -> claimDocumentService.deleteDocument(document.getDocumentId()));
         claimRepository.delete(claim);
@@ -214,6 +251,11 @@ public class ClaimServiceImpl implements IClaimService {
             InsuranceCompany company,
             PatientInsurance patientInsurance) {
 
+        if (dto.getDateOfService() == null) {
+            throw new BusinessValidationException("dateOfService", "Date of service is required.");
+        }
+        validateMoneyAmount(dto.getClaimAmount(), "claimAmount", "Claim amount");
+
         if (invoice.getPatient() == null
                 || invoice.getPatient().getPatientId() != patient.getPatientId()) {
             throw new BusinessValidationException(
@@ -221,8 +263,18 @@ public class ClaimServiceImpl implements IClaimService {
                     "The selected invoice does not belong to the selected patient.");
         }
 
-        if ("CANCELLED".equalsIgnoreCase(invoice.getStatus())) {
-            throw new BusinessValidationException("invoiceId", "A cancelled invoice cannot be claimed.");
+        String invoiceStatus = invoice.getStatus() == null
+                ? ""
+                : invoice.getStatus().trim().toUpperCase();
+        if (!CLAIMABLE_INVOICE_STATUSES.contains(invoiceStatus)) {
+            throw new BusinessValidationException(
+                    "invoiceId",
+                    "Only pending, unpaid, or overdue invoices can be claimed. Paid invoices do not need a claim.");
+        }
+        if (invoicePaymentRepository.existsByInvoiceInvoiceId(invoice.getInvoiceId())) {
+            throw new BusinessValidationException(
+                    "invoiceId",
+                    "This invoice has already been paid and cannot be submitted for insurance.");
         }
 
         if (patientInsurance.getPatient() == null
@@ -270,6 +322,12 @@ public class ClaimServiceImpl implements IClaimService {
                     "dateOfService",
                     "Date of service must be within the insurance policy period.");
         }
+        if (invoice.getInvoiceDate() != null
+                && dto.getDateOfService().isAfter(invoice.getInvoiceDate())) {
+            throw new BusinessValidationException(
+                    "dateOfService",
+                    "Date of service cannot be after the invoice date.");
+        }
 
         if (invoice.getTotalAmount() == null || invoice.getTotalAmount().compareTo(BigDecimal.ZERO) <= 0) {
             throw new BusinessValidationException("invoiceId", "The selected invoice has no valid total amount.");
@@ -286,19 +344,13 @@ public class ClaimServiceImpl implements IClaimService {
             throw new BusinessValidationException("enrollmentId", "The selected plan has no valid coverage amount.");
         }
 
-        if (dto.getClaimAmount().compareTo(coverageAmount) > 0) {
-            throw new BusinessValidationException(
-                    "claimAmount",
-                    "Claim amount cannot exceed the policy coverage of " + coverageAmount + ".");
-        }
-
         BigDecimal approvedCoverageUsed = safeAmount(
                 claimRepository.sumApprovedAmountByEnrollmentId(patientInsurance.getEnrollmentId()));
         BigDecimal remainingCoverage = coverageAmount.subtract(approvedCoverageUsed).max(BigDecimal.ZERO);
-        if (dto.getClaimAmount().compareTo(remainingCoverage) > 0) {
+        if (remainingCoverage.compareTo(BigDecimal.ZERO) <= 0) {
             throw new BusinessValidationException(
-                    "claimAmount",
-                    "Claim amount exceeds the remaining policy coverage of " + remainingCoverage + ".");
+                    "enrollmentId",
+                    "The selected policy has no remaining coverage.");
         }
 
         if (claimRepository.existsByInvoiceInvoiceIdAndStatusIn(invoice.getInvoiceId(), ACTIVE_CLAIM_STATUSES)) {
@@ -308,27 +360,99 @@ public class ClaimServiceImpl implements IClaimService {
         }
     }
 
-    private void validateRemainingCoverageForApproval(Claim claim) {
-        PatientInsurance insurance = claim.getPatientInsurance();
-        if (insurance == null || insurance.getInsurancePlan() == null) {
+    private void validateApprovedAmount(Claim claim, BigDecimal approvedAmount) {
+        validateMoneyAmount(approvedAmount, "approvedAmount", "Approved amount");
+        if (approvedAmount.compareTo(claim.getClaimAmount()) > 0) {
+            throw new BusinessValidationException(
+                    "approvedAmount",
+                    "Approved amount cannot exceed the requested claim amount of " + claim.getClaimAmount() + ".");
+        }
+        BigDecimal invoiceTotal = safeAmount(claim.getInvoice().getTotalAmount());
+        if (approvedAmount.compareTo(invoiceTotal) > 0) {
+            throw new BusinessValidationException(
+                    "approvedAmount",
+                    "Approved amount cannot exceed the invoice total of " + invoiceTotal + ".");
+        }
+    }
+
+    private void lockPolicyAndValidateRemainingCoverage(Claim claim, BigDecimal approvedAmount) {
+        PatientInsurance currentInsurance = claim.getPatientInsurance();
+        if (currentInsurance == null) {
             throw new BusinessValidationException(
                     "enrollmentId",
                     "This claim is not linked to a valid insurance policy.");
         }
 
-        BigDecimal coverage = insurance.getInsurancePlan().getCoverageAmount();
-        BigDecimal approved = safeAmount(
-                claimRepository.sumApprovedAmountByEnrollmentId(insurance.getEnrollmentId()));
-        BigDecimal requestedTotal = approved.add(claim.getClaimAmount());
-
-        if (requestedTotal.compareTo(coverage) > 0) {
-            BigDecimal remaining = coverage.subtract(approved).max(BigDecimal.ZERO);
+        PatientInsurance lockedInsurance = patientInsuranceRepository
+                .findByIdForUpdate(currentInsurance.getEnrollmentId())
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Insurance enrollment not found with id: " + currentInsurance.getEnrollmentId()));
+        if (lockedInsurance.getInsurancePlan() == null) {
             throw new BusinessValidationException(
-                    "claimAmount",
-                    "Claim cannot be approved because only " + remaining + " coverage remains.");
+                    "enrollmentId",
+                    "This claim is not linked to a valid insurance plan.");
+        }
+
+        BigDecimal coverage = safeAmount(lockedInsurance.getInsurancePlan().getCoverageAmount());
+        BigDecimal approved = safeAmount(
+                claimRepository.sumApprovedAmountByEnrollmentId(lockedInsurance.getEnrollmentId()));
+        BigDecimal remaining = coverage.subtract(approved).max(BigDecimal.ZERO);
+
+        if (approvedAmount.compareTo(remaining) > 0) {
+            throw new BusinessValidationException(
+                    "approvedAmount",
+                    "Approved amount exceeds the remaining policy coverage of " + remaining + ".");
         }
     }
 
+
+    private void validateInvoiceCanReceiveInsurancePayment(Invoice invoice) {
+        if (invoice == null) {
+            throw new BusinessValidationException("invoiceId", "The claim is not linked to a valid invoice.");
+        }
+        String status = invoice.getStatus() == null ? "" : invoice.getStatus().trim().toUpperCase();
+        if ("PAID".equals(status) || invoicePaymentRepository.existsByInvoiceInvoiceId(invoice.getInvoiceId())) {
+            throw new BusinessValidationException(
+                    "invoiceId",
+                    "This invoice has already been paid and the claim can no longer be approved.");
+        }
+        if ("CANCELLED".equals(status)) {
+            throw new BusinessValidationException(
+                    "invoiceId",
+                    "A claim linked to a cancelled invoice cannot be approved.");
+        }
+    }
+
+    private void validateMoneyAmount(BigDecimal amount, String field, String label) {
+        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new BusinessValidationException(field, label + " must be greater than 0.");
+        }
+        if (amount.compareTo(MAX_MONEY_AMOUNT) > 0) {
+            throw new BusinessValidationException(field, label + " cannot exceed " + MAX_MONEY_AMOUNT + ".");
+        }
+        if (Math.max(0, amount.stripTrailingZeros().scale()) > 2) {
+            throw new BusinessValidationException(field, label + " can have at most 2 decimal places.");
+        }
+    }
+
+    private void validateInsuranceCompanyAccess(InsuranceCompany company) {
+        Authentication authentication = currentAuthentication();
+        if (authentication == null) {
+            return;
+        }
+        Set<String> roles = authentication.getAuthorities().stream()
+                .map(authority -> authority.getAuthority())
+                .collect(java.util.stream.Collectors.toSet());
+        if (roles.contains("ROLE_ADMIN")) {
+            return;
+        }
+        boolean owner = roles.contains("ROLE_INSURANCE")
+                && company.getAppUser() != null
+                && authentication.getName().equalsIgnoreCase(company.getAppUser().getEmail());
+        if (!owner) {
+            throw new AccessDeniedException("Insurance companies can view only their own active claims.");
+        }
+    }
 
     private void validateReadAccess(Claim claim) {
         if (!canCurrentUserRead(claim)) {
@@ -547,6 +671,7 @@ public class ClaimServiceImpl implements IClaimService {
         dto.setTreatment(claim.getTreatment());
         dto.setDateOfService(claim.getDateOfService());
         dto.setClaimAmount(claim.getClaimAmount());
+        dto.setApprovedAmount(claim.getApprovedAmount());
         dto.setSubmissionDate(claim.getSubmissionDate());
         dto.setApprovalDate(claim.getApprovalDate());
         dto.setStatus(claim.getStatus());
@@ -564,6 +689,15 @@ public class ClaimServiceImpl implements IClaimService {
         }
         dto.setCompanyName(claim.getInsuranceCompany().getCompanyName());
 
+        claimPaymentRepository.findByClaimClaimId(claim.getClaimId()).ifPresent(payment -> {
+            dto.setInsurancePaymentId(payment.getPaymentId());
+            dto.setInsurancePaymentDate(payment.getPaymentDate());
+            dto.setInsurancePaidAmount(payment.getPaymentAmount());
+            dto.setInsurancePaymentMode(payment.getPaymentMode());
+            dto.setInsuranceTransactionReference(payment.getTransactionReference());
+            dto.setInsurancePaymentProcessed(true);
+        });
+
         if (claim.getPatientInsurance() != null
                 && claim.getPatientInsurance().getInsurancePlan() != null) {
             dto.setPlanId(claim.getPatientInsurance().getInsurancePlan().getPlanId());
@@ -573,13 +707,43 @@ public class ClaimServiceImpl implements IClaimService {
             BigDecimal approved = safeAmount(
                     claimRepository.sumApprovedAmountByEnrollmentId(
                             claim.getPatientInsurance().getEnrollmentId()));
+            BigDecimal remaining = coverage.subtract(approved).max(BigDecimal.ZERO);
             dto.setCoverageAmount(coverage);
             dto.setApprovedCoverageUsed(approved);
-            dto.setRemainingCoverage(coverage.subtract(approved).max(BigDecimal.ZERO));
+            dto.setRemainingCoverage(remaining);
+
+            if ("PENDING".equalsIgnoreCase(claim.getStatus())) {
+                dto.setMaxApprovableAmount(minAmount(
+                        safeAmount(claim.getClaimAmount()),
+                        safeAmount(claim.getInvoice().getTotalAmount()),
+                        remaining));
+            } else if ("APPROVED".equalsIgnoreCase(claim.getStatus())) {
+                dto.setMaxApprovableAmount(effectiveApprovedAmount(claim));
+            } else {
+                dto.setMaxApprovableAmount(BigDecimal.ZERO);
+            }
         }
 
         dto.setDocumentCount(claimDocumentRepository.countByClaimClaimId(claim.getClaimId()));
         return dto;
+    }
+
+    private BigDecimal effectiveApprovedAmount(Claim claim) {
+        if (claim.getApprovedAmount() != null) {
+            return claim.getApprovedAmount();
+        }
+        return "APPROVED".equalsIgnoreCase(claim.getStatus())
+                ? safeAmount(claim.getClaimAmount())
+                : BigDecimal.ZERO;
+    }
+
+    private BigDecimal minAmount(BigDecimal... values) {
+        BigDecimal result = null;
+        for (BigDecimal value : values) {
+            BigDecimal safe = safeAmount(value);
+            result = result == null || safe.compareTo(result) < 0 ? safe : result;
+        }
+        return result == null ? BigDecimal.ZERO : result.max(BigDecimal.ZERO);
     }
 
     private BigDecimal safeAmount(BigDecimal value) {

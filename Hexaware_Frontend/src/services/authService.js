@@ -7,6 +7,11 @@ export async function login(credentials) {
   return response.data;
 }
 
+export async function getCurrentUser() {
+  const response = await api.get('/api/v1/auth/me');
+  return response.data;
+}
+
 export async function register(user) {
   const response = await api.post('/api/v1/auth/register', user);
   return response.data;
