@@ -190,7 +190,7 @@ public class AdminServiceImpl implements IAdminService {
         ClaimPaymentDTO dto = new ClaimPaymentDTO();
 
         dto.setPaymentId(payment.getPaymentId());
-        dto.setClaimId(payment.getClaim().getClaimId());
+        dto.setClaimId(payment.getClaim() != null ? Integer.valueOf(payment.getClaim().getClaimId()) : null);
         dto.setPaymentDate(payment.getPaymentDate());
         dto.setPaymentAmount(payment.getPaymentAmount());
         dto.setPaymentMode(payment.getPaymentMode());

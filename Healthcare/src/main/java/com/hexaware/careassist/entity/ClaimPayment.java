@@ -8,8 +8,11 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.OneToOne;
+import org.hibernate.annotations.NotFound;
+import org.hibernate.annotations.NotFoundAction;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import lombok.AllArgsConstructor;
@@ -36,9 +39,10 @@ public class ClaimPayment {
     @Column(name = "payment_id")
     private int paymentId;
 
-    @OneToOne(optional = false)
-    @JoinColumn(name = "claim_id", nullable = false)
-    private Claim claim;
+        @OneToOne(optional = true, fetch = FetchType.LAZY)
+        @JoinColumn(name = "claim_id", nullable = false)
+        @NotFound(action = NotFoundAction.IGNORE)
+        private Claim claim;
 
     @Column(name = "payment_date", nullable = false)
     private LocalDateTime paymentDate;
