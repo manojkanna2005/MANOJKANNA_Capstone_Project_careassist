@@ -30,7 +30,15 @@ const base = {
   createdAt: nowDateTime(),
 };
 
-const hasAtMostTwoDecimals = (value) => /^\d+(?:\.\d{1,2})?$/.test(String(value));
+const hasAtMostTwoDecimals = (value) =>
+  /^\d+(?:\.\d{1,2})?$/.test(String(value));
+
+const getNextDate = (value) => {
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(year, month - 1, day);
+  date.setDate(date.getDate() + 1);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+};
 
 function GenerateInvoice() {
   const [form, setForm] = useState(base);
@@ -66,10 +74,7 @@ function GenerateInvoice() {
 
   const billAmount = useMemo(
     () =>
-      FEE_FIELDS.reduce(
-        (sum, [field]) => sum + Number(form[field] || 0),
-        0,
-      ),
+      FEE_FIELDS.reduce((sum, [field]) => sum + Number(form[field] || 0), 0),
     [form],
   );
   const taxAmount = useMemo(
@@ -101,8 +106,8 @@ function GenerateInvoice() {
     if (!form.invoiceDate || form.invoiceDate > today()) {
       return "Invoice date is required and cannot be in the future.";
     }
-    if (!form.dueDate || form.dueDate < form.invoiceDate) {
-      return "Due date cannot be before the invoice date.";
+    if (!form.dueDate || form.dueDate <= form.invoiceDate) {
+      return "Due date cannot be the same day as or before the invoice date.";
     }
 
     for (const [field, label] of FEE_FIELDS) {
@@ -264,7 +269,9 @@ function GenerateInvoice() {
                 name="dueDate"
                 value={form.dueDate}
                 onChange={handleChange}
-                min={form.invoiceDate || undefined}
+                min={
+                  form.invoiceDate ? getNextDate(form.invoiceDate) : undefined
+                }
                 required
                 disabled={processing}
               />
@@ -274,7 +281,9 @@ function GenerateInvoice() {
           <div className="row">
             {FEE_FIELDS.map(([name, label]) => (
               <div className="col-md-3 mb-3" key={name}>
-                <label className="form-label" htmlFor={name}>{label}</label>
+                <label className="form-label" htmlFor={name}>
+                  {label}
+                </label>
                 <input
                   id={name}
                   className="form-control"
@@ -295,7 +304,9 @@ function GenerateInvoice() {
 
           <div className="row">
             <div className="col-md-4 mb-3">
-              <label className="form-label" htmlFor="taxPercentage">Tax %</label>
+              <label className="form-label" htmlFor="taxPercentage">
+                Tax %
+              </label>
               <input
                 id="taxPercentage"
                 className="form-control"
@@ -313,11 +324,19 @@ function GenerateInvoice() {
             </div>
             <div className="col-md-4 mb-3">
               <label className="form-label">Tax Amount</label>
-              <input className="form-control" value={taxAmount.toFixed(2)} readOnly />
+              <input
+                className="form-control"
+                value={taxAmount.toFixed(2)}
+                readOnly
+              />
             </div>
             <div className="col-md-4 mb-3">
               <label className="form-label">Total Amount</label>
-              <input className="form-control" value={totalAmount.toFixed(2)} readOnly />
+              <input
+                className="form-control"
+                value={totalAmount.toFixed(2)}
+                readOnly
+              />
             </div>
           </div>
 
